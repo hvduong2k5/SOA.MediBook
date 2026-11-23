@@ -1,0 +1,1289 @@
+asyncapi: 2.6.0
+info:
+  title: Clinic Appointment & Real-time Queue – Internal Event API
+  version: 1.0.0
+  description: Hợp đồng Event-driven nội bộ cho 6 Microservices. File này mô tả RabbitMQ topic exchange, routing keys, event envelopes và consumer queues. API Gateway là thành phần độc lập; không nằm trong broker event flow. Không gửi thông tin sức khỏe nhạy cảm, chẩn đoán, đơn thuốc hoặc PII không cần thiết trong event.
+  contact:
+    name: Clinic Platform Team
+defaultContentType: application/json
+servers:
+  local:
+    url: localhost:5672
+    protocol: amqp
+    protocolVersion: 0-9-1
+    description: RabbitMQ local development; credentials lấy từ environment variables.
+    security:
+      - rabbitmqUserPassword: []
+  docker:
+    url: rabbitmq:5672
+    protocol: amqp
+    protocolVersion: 0-9-1
+    description: RabbitMQ hostname trong Docker Compose.
+    security:
+      - rabbitmqUserPassword: []
+channels:
+  consumer.patient.profile.created.v1:
+    description: 'Routing key `consumer.patient.profile.created.v1`. Publisher: Consumer Service. Trigger: Hồ sơ bệnh nhân được tạo và liên kết thành công với tài khoản IAM. Consumers: Reminder & Notification Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishPatientProfileCreated
+      summary: Publish consumer.patient.profile.created.v1
+      description: Gửi thông báo chào mừng/xác nhận hồ sơ nếu chính sách bật; không gửi dữ liệu hồ sơ nhạy cảm.
+      message:
+        $ref: '#/components/messages/PatientProfileCreated'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Consumer Service
+    x-consumer-services:
+      - Reminder & Notification Service
+    x-consumer-queues:
+      - q.notification.patient-profile-created
+    x-delivery-guarantee: at-least-once
+    x-idempotency: eventId; consumer lưu inbox/processed event trước khi ACK.
+    subscribe:
+      operationId: consumePatientProfileCreated
+      summary: Consume consumer.patient.profile.created.v1
+      description: 'Consumer queues: q.notification.patient-profile-created. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/PatientProfileCreated'
+      bindings:
+        amqp:
+          ack: true
+  provider.doctor.schedule.changed.v1:
+    description: 'Routing key `provider.doctor.schedule.changed.v1`. Publisher: Provider / Resource Service. Trigger: Lịch làm việc được publish, cập nhật, hủy hoặc đơn nghỉ được duyệt. Consumers: Scheduling & Queue Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishDoctorScheduleChanged
+      summary: Publish provider.doctor.schedule.changed.v1
+      description: Đồng bộ thay đổi lịch nguồn lực; đánh dấu/điều chỉnh slot tương ứng và phát hiện lịch hẹn bị ảnh hưởng.
+      message:
+        $ref: '#/components/messages/DoctorScheduleChanged'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Provider / Resource Service
+    x-consumer-services:
+      - Scheduling & Queue Service
+    x-consumer-queues:
+      - q.scheduling.doctor-schedule-changed
+    x-delivery-guarantee: at-least-once
+    x-idempotency: eventId + scheduleId + scheduleVersion.
+    subscribe:
+      operationId: consumeDoctorScheduleChanged
+      summary: Consume provider.doctor.schedule.changed.v1
+      description: 'Consumer queues: q.scheduling.doctor-schedule-changed. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/DoctorScheduleChanged'
+      bindings:
+        amqp:
+          ack: true
+  scheduling.appointment.created.v1:
+    description: 'Routing key `scheduling.appointment.created.v1`. Publisher: Scheduling & Queue Service. Trigger: Appointment được commit thành công sau khi giữ slot nguyên tử. Consumers: Reminder & Notification Service (Reminder Worker và Notification Handler).'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishAppointmentCreated
+      summary: Publish scheduling.appointment.created.v1
+      description: Tạo reminder job và thông báo xác nhận đặt lịch. Consumer tra thông tin liên hệ qua API có xác thực, không lấy PII từ event.
+      message:
+        $ref: '#/components/messages/AppointmentCreated'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Scheduling & Queue Service
+    x-consumer-services:
+      - Reminder & Notification Service (Reminder Worker và Notification Handler)
+    x-consumer-queues:
+      - q.reminder.appointment-created
+      - q.notification.appointment-created
+    x-delivery-guarantee: at-least-once
+    x-idempotency: appointmentId + eventType; reminder idempotency key theo appointmentId + reminderType + scheduledAt.
+    subscribe:
+      operationId: consumeAppointmentCreated
+      summary: Consume scheduling.appointment.created.v1
+      description: 'Consumer queues: q.reminder.appointment-created, q.notification.appointment-created. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/AppointmentCreated'
+      bindings:
+        amqp:
+          ack: true
+  scheduling.appointment.confirmed.v1:
+    description: 'Routing key `scheduling.appointment.confirmed.v1`. Publisher: Scheduling & Queue Service. Trigger: Lịch hẹn chuyển sang CONFIRMED (nếu cơ sở áp dụng bước xác nhận riêng). Consumers: Reminder & Notification Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishAppointmentConfirmed
+      summary: Publish scheduling.appointment.confirmed.v1
+      description: Gửi xác nhận cuối cùng và/hoặc cập nhật reminder theo chính sách.
+      message:
+        $ref: '#/components/messages/AppointmentConfirmed'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Scheduling & Queue Service
+    x-consumer-services:
+      - Reminder & Notification Service
+    x-consumer-queues:
+      - q.notification.appointment-confirmed
+    x-delivery-guarantee: at-least-once
+    x-idempotency: appointmentId + eventType + aggregateVersion.
+    subscribe:
+      operationId: consumeAppointmentConfirmed
+      summary: Consume scheduling.appointment.confirmed.v1
+      description: 'Consumer queues: q.notification.appointment-confirmed. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/AppointmentConfirmed'
+      bindings:
+        amqp:
+          ack: true
+  scheduling.appointment.rescheduled.v1:
+    description: 'Routing key `scheduling.appointment.rescheduled.v1`. Publisher: Scheduling & Queue Service. Trigger: Đổi lịch đã hoàn tất; slot mới đã được giữ thành công và slot cũ được giải phóng trong giao dịch. Consumers: Reminder & Notification Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishAppointmentRescheduled
+      summary: Publish scheduling.appointment.rescheduled.v1
+      description: Hủy/cập nhật reminder cũ, tạo reminder theo giờ mới và thông báo thay đổi lịch.
+      message:
+        $ref: '#/components/messages/AppointmentRescheduled'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Scheduling & Queue Service
+    x-consumer-services:
+      - Reminder & Notification Service
+    x-consumer-queues:
+      - q.reminder.appointment-rescheduled
+      - q.notification.appointment-rescheduled
+    x-delivery-guarantee: at-least-once
+    x-idempotency: appointmentId + aggregateVersion.
+    subscribe:
+      operationId: consumeAppointmentRescheduled
+      summary: Consume scheduling.appointment.rescheduled.v1
+      description: 'Consumer queues: q.reminder.appointment-rescheduled, q.notification.appointment-rescheduled. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/AppointmentRescheduled'
+      bindings:
+        amqp:
+          ack: true
+  scheduling.appointment.cancelled.v1:
+    description: 'Routing key `scheduling.appointment.cancelled.v1`. Publisher: Scheduling & Queue Service. Trigger: Appointment chuyển sang CANCELLED và slot được giải phóng thành công. Consumers: Reminder & Notification Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishAppointmentCancelled
+      summary: Publish scheduling.appointment.cancelled.v1
+      description: Hủy reminder còn chờ và gửi thông báo hủy.
+      message:
+        $ref: '#/components/messages/AppointmentCancelled'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Scheduling & Queue Service
+    x-consumer-services:
+      - Reminder & Notification Service
+    x-consumer-queues:
+      - q.reminder.appointment-cancelled
+      - q.notification.appointment-cancelled
+    x-delivery-guarantee: at-least-once
+    x-idempotency: appointmentId + aggregateVersion.
+    subscribe:
+      operationId: consumeAppointmentCancelled
+      summary: Consume scheduling.appointment.cancelled.v1
+      description: 'Consumer queues: q.reminder.appointment-cancelled, q.notification.appointment-cancelled. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/AppointmentCancelled'
+      bindings:
+        amqp:
+          ack: true
+  scheduling.appointment.expired.v1:
+    description: 'Routing key `scheduling.appointment.expired.v1`. Publisher: Scheduling & Queue Service. Trigger: Appointment/slot reservation hết hạn theo chính sách. Consumers: Reminder & Notification Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishAppointmentExpired
+      summary: Publish scheduling.appointment.expired.v1
+      description: Ngăn reminder tiếp tục chạy và thông báo khi chính sách yêu cầu.
+      message:
+        $ref: '#/components/messages/AppointmentExpired'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Scheduling & Queue Service
+    x-consumer-services:
+      - Reminder & Notification Service
+    x-consumer-queues:
+      - q.notification.appointment-expired
+    x-delivery-guarantee: at-least-once
+    x-idempotency: appointmentId + aggregateVersion.
+    subscribe:
+      operationId: consumeAppointmentExpired
+      summary: Consume scheduling.appointment.expired.v1
+      description: 'Consumer queues: q.notification.appointment-expired. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/AppointmentExpired'
+      bindings:
+        amqp:
+          ack: true
+  queue.patient.checked-in.v1:
+    description: 'Routing key `queue.patient.checked-in.v1`. Publisher: Scheduling & Queue Service. Trigger: Lễ tân xác nhận có mặt; Queue Ticket được tạo hoặc chuyển WAITING. Consumers: Reminder & Notification Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishPatientCheckedIn
+      summary: Publish queue.patient.checked-in.v1
+      description: Cập nhật màn hình bác sĩ/lễ tân; thông báo bệnh nhân đã check-in nếu cần.
+      message:
+        $ref: '#/components/messages/PatientCheckedIn'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Scheduling & Queue Service
+    x-consumer-services:
+      - Reminder & Notification Service
+    x-consumer-queues:
+      - q.notification.patient-checked-in
+    x-delivery-guarantee: at-least-once
+    x-idempotency: queueTicketId + eventType.
+    subscribe:
+      operationId: consumePatientCheckedIn
+      summary: Consume queue.patient.checked-in.v1
+      description: 'Consumer queues: q.notification.patient-checked-in. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/PatientCheckedIn'
+      bindings:
+        amqp:
+          ack: true
+  queue.walk-in.registered.v1:
+    description: 'Routing key `queue.walk-in.registered.v1`. Publisher: Scheduling & Queue Service. Trigger: Lễ tân tiếp nhận bệnh nhân đến trực tiếp không có Appointment. Consumers: Reminder & Notification Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishWalkInRegistered
+      summary: Publish queue.walk-in.registered.v1
+      description: Cập nhật danh sách chờ và giao diện lễ tân/bác sĩ; không tạo Appointment giả.
+      message:
+        $ref: '#/components/messages/WalkInRegistered'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Scheduling & Queue Service
+    x-consumer-services:
+      - Reminder & Notification Service
+    x-consumer-queues:
+      - q.notification.walk-in-registered
+    x-delivery-guarantee: at-least-once
+    x-idempotency: queueTicketId + eventType.
+    subscribe:
+      operationId: consumeWalkInRegistered
+      summary: Consume queue.walk-in.registered.v1
+      description: 'Consumer queues: q.notification.walk-in-registered. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/WalkInRegistered'
+      bindings:
+        amqp:
+          ack: true
+  queue.ticket.called.v1:
+    description: 'Routing key `queue.ticket.called.v1`. Publisher: Scheduling & Queue Service. Trigger: Bác sĩ gọi lượt đủ điều kiện; trạng thái ticket chuyển CALLED. Consumers: Reminder & Notification Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishQueueTicketCalled
+      summary: Publish queue.ticket.called.v1
+      description: Gửi thông báo gọi khám và cập nhật bảng hàng đợi realtime.
+      message:
+        $ref: '#/components/messages/QueueTicketCalled'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Scheduling & Queue Service
+    x-consumer-services:
+      - Reminder & Notification Service
+    x-consumer-queues:
+      - q.notification.queue-ticket-called
+    x-delivery-guarantee: at-least-once
+    x-idempotency: queueTicketId + trạng thái CALLED + callSequence.
+    subscribe:
+      operationId: consumeQueueTicketCalled
+      summary: Consume queue.ticket.called.v1
+      description: 'Consumer queues: q.notification.queue-ticket-called. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/QueueTicketCalled'
+      bindings:
+        amqp:
+          ack: true
+  queue.ticket.started.v1:
+    description: 'Routing key `queue.ticket.started.v1`. Publisher: Scheduling & Queue Service. Trigger: Bác sĩ xác nhận bắt đầu khám; ticket chuyển IN_PROGRESS. Consumers: Clinical Service, Reminder & Notification Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishQueueTicketStarted
+      summary: Publish queue.ticket.started.v1
+      description: Clinical tạo Medical Encounter gắn với Queue Ticket; Notification cập nhật trạng thái cần thiết.
+      message:
+        $ref: '#/components/messages/QueueTicketStarted'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Scheduling & Queue Service
+    x-consumer-services:
+      - Clinical Service
+      - Reminder & Notification Service
+    x-consumer-queues:
+      - q.clinical.queue-ticket-started
+      - q.notification.queue-ticket-started
+    x-delivery-guarantee: at-least-once
+    x-idempotency: queueTicketId + eventType; Clinical đặt unique constraint trên queueTicketId.
+    subscribe:
+      operationId: consumeQueueTicketStarted
+      summary: Consume queue.ticket.started.v1
+      description: 'Consumer queues: q.clinical.queue-ticket-started, q.notification.queue-ticket-started. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/QueueTicketStarted'
+      bindings:
+        amqp:
+          ack: true
+  queue.ticket.completed.v1:
+    description: 'Routing key `queue.ticket.completed.v1`. Publisher: Scheduling & Queue Service. Trigger: Bác sĩ hoàn tất lượt và ticket chuyển COMPLETED. Consumers: Clinical Service, Reminder & Notification Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishQueueTicketCompleted
+      summary: Publish queue.ticket.completed.v1
+      description: Clinical đồng bộ việc kết thúc lượt khám thực tế; không tự động công bố hồ sơ. Notification cập nhật giao diện liên quan.
+      message:
+        $ref: '#/components/messages/QueueTicketCompleted'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Scheduling & Queue Service
+    x-consumer-services:
+      - Clinical Service
+      - Reminder & Notification Service
+    x-consumer-queues:
+      - q.clinical.queue-ticket-completed
+      - q.notification.queue-ticket-completed
+    x-delivery-guarantee: at-least-once
+    x-idempotency: queueTicketId + eventType.
+    subscribe:
+      operationId: consumeQueueTicketCompleted
+      summary: Consume queue.ticket.completed.v1
+      description: 'Consumer queues: q.clinical.queue-ticket-completed, q.notification.queue-ticket-completed. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/QueueTicketCompleted'
+      bindings:
+        amqp:
+          ack: true
+  queue.ticket.dispatched.v1:
+    description: 'Routing key `queue.ticket.dispatched.v1`. Publisher: Scheduling & Queue Service. Trigger: Lễ tân điều phối lượt đang chờ sang bác sĩ/phòng phù hợp. Consumers: Reminder & Notification Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishQueueTicketDispatched
+      summary: Publish queue.ticket.dispatched.v1
+      description: Thông báo cho bệnh nhân và cập nhật màn hình bác sĩ/lễ tân.
+      message:
+        $ref: '#/components/messages/QueueTicketDispatched'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Scheduling & Queue Service
+    x-consumer-services:
+      - Reminder & Notification Service
+    x-consumer-queues:
+      - q.notification.queue-ticket-dispatched
+    x-delivery-guarantee: at-least-once
+    x-idempotency: queueTicketId + aggregateVersion.
+    subscribe:
+      operationId: consumeQueueTicketDispatched
+      summary: Consume queue.ticket.dispatched.v1
+      description: 'Consumer queues: q.notification.queue-ticket-dispatched. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/QueueTicketDispatched'
+      bindings:
+        amqp:
+          ack: true
+  queue.ticket.reordered.v1:
+    description: 'Routing key `queue.ticket.reordered.v1`. Publisher: Scheduling & Queue Service. Trigger: Lễ tân thay đổi thứ tự theo quyền và có lý do. Consumers: Reminder & Notification Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishQueueTicketReordered
+      summary: Publish queue.ticket.reordered.v1
+      description: Cập nhật vị trí hiển thị cho bệnh nhân bị ảnh hưởng; lưu lịch sử trong Scheduling & Queue.
+      message:
+        $ref: '#/components/messages/QueueTicketReordered'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Scheduling & Queue Service
+    x-consumer-services:
+      - Reminder & Notification Service
+    x-consumer-queues:
+      - q.notification.queue-ticket-reordered
+    x-delivery-guarantee: at-least-once
+    x-idempotency: queueTicketId + aggregateVersion.
+    subscribe:
+      operationId: consumeQueueTicketReordered
+      summary: Consume queue.ticket.reordered.v1
+      description: 'Consumer queues: q.notification.queue-ticket-reordered. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/QueueTicketReordered'
+      bindings:
+        amqp:
+          ack: true
+  queue.doctor.operational-status.changed.v1:
+    description: 'Routing key `queue.doctor.operational-status.changed.v1`. Publisher: Scheduling & Queue Service. Trigger: Trạng thái vận hành bác sĩ thay đổi trong phạm vi hàng đợi. Consumers: Reminder & Notification Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishDoctorOperationalStatusChanged
+      summary: Publish queue.doctor.operational-status.changed.v1
+      description: Cập nhật màn hình điều phối; trạng thái vận hành hàng đợi được Scheduling & Queue sở hữu.
+      message:
+        $ref: '#/components/messages/DoctorOperationalStatusChanged'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Scheduling & Queue Service
+    x-consumer-services:
+      - Reminder & Notification Service
+    x-consumer-queues:
+      - q.notification.doctor-operational-status-changed
+    x-delivery-guarantee: at-least-once
+    x-idempotency: doctorId + aggregateVersion.
+    subscribe:
+      operationId: consumeDoctorOperationalStatusChanged
+      summary: Consume queue.doctor.operational-status.changed.v1
+      description: 'Consumer queues: q.notification.doctor-operational-status-changed. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/DoctorOperationalStatusChanged'
+      bindings:
+        amqp:
+          ack: true
+  clinical.encounter.published.v1:
+    description: 'Routing key `clinical.encounter.published.v1`. Publisher: Clinical Service. Trigger: Bác sĩ hoàn tất và công bố hồ sơ lần khám. Consumers: Reminder & Notification Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishMedicalEncounterPublished
+      summary: Publish clinical.encounter.published.v1
+      description: Thông báo bệnh nhân có kết quả; chỉ truyền định danh và phiên bản, không đưa chẩn đoán/đơn thuốc vào event.
+      message:
+        $ref: '#/components/messages/MedicalEncounterPublished'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Clinical Service
+    x-consumer-services:
+      - Reminder & Notification Service
+    x-consumer-queues:
+      - q.notification.encounter-published
+    x-delivery-guarantee: at-least-once
+    x-idempotency: encounterId + recordVersion.
+    subscribe:
+      operationId: consumeMedicalEncounterPublished
+      summary: Consume clinical.encounter.published.v1
+      description: 'Consumer queues: q.notification.encounter-published. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/MedicalEncounterPublished'
+      bindings:
+        amqp:
+          ack: true
+  clinical.follow-up.recommended.v1:
+    description: 'Routing key `clinical.follow-up.recommended.v1`. Publisher: Clinical Service. Trigger: Bác sĩ lưu khuyến nghị tái khám và thời điểm nhắc. Consumers: Reminder & Notification Service.'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: clinic.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    publish:
+      operationId: publishClinicalFollowUpRecommended
+      summary: Publish clinical.follow-up.recommended.v1
+      description: Tạo reminder tái khám và thông báo hướng dẫn; event không chứa ghi chú điều trị chi tiết.
+      message:
+        $ref: '#/components/messages/ClinicalFollowUpRecommended'
+      bindings:
+        amqp:
+          deliveryMode: 2
+          mandatory: true
+          timestamp: true
+    x-producer-service: Clinical Service
+    x-consumer-services:
+      - Reminder & Notification Service
+    x-consumer-queues:
+      - q.reminder.follow-up-recommended
+      - q.notification.follow-up-recommended
+    x-delivery-guarantee: at-least-once
+    x-idempotency: followUpId + eventType.
+    subscribe:
+      operationId: consumeClinicalFollowUpRecommended
+      summary: Consume clinical.follow-up.recommended.v1
+      description: 'Consumer queues: q.reminder.follow-up-recommended, q.notification.follow-up-recommended. Each subscriber must use an independent durable queue for fan-out delivery.'
+      message:
+        $ref: '#/components/messages/ClinicalFollowUpRecommended'
+      bindings:
+        amqp:
+          ack: true
+components:
+  securitySchemes:
+    rabbitmqUserPassword:
+      type: userPassword
+      description: RabbitMQ username/password; không hard-code credentials trong contract.
+  messages:
+    PatientProfileCreated:
+      name: PatientProfileCreated
+      title: consumer.patient.profile.created.v1
+      summary: Hồ sơ bệnh nhân được tạo và liên kết thành công với tài khoản IAM.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          x-event-id:
+            type: string
+            format: uuid
+          x-correlation-id:
+            type: string
+          content-type:
+            type: string
+            enum:
+              - application/json
+        required:
+          - x-event-id
+          - x-correlation-id
+      payload:
+        $ref: '#/components/schemas/PatientProfileCreatedEvent'
+      examples:
+        - name: PatientProfileCreatedExample
+          payload:
+            eventId: 00000000-0000-4000-8000-000000000001
+            eventType: consumer.patient.profile.created.v1
+            eventVersion: 1
+            occurredAt: '2026-11-20T09:00:00Z'
+            producer: CONSUMER_SERVICE
+            correlationId: 00000000-0000-4000-8000-000000000002
+            aggregateId: 00000000-0000-4000-8000-000000000003
+            aggregateVersion: 1
+            data:
+              patientId: 00000000-0000-4000-8000-000000000010
+              userId: 00000000-0000-4000-8000-000000000010
+              profileCreatedAt: '2026-11-21T09:00:00Z'
+              profileStatus: ACTIVE
+    DoctorScheduleChanged:
+      name: DoctorScheduleChanged
+      title: provider.doctor.schedule.changed.v1
+      summary: Lịch làm việc được publish, cập nhật, hủy hoặc đơn nghỉ được duyệt.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          x-event-id:
+            type: string
+            format: uuid
+          x-correlation-id:
+            type: string
+          content-type:
+            type: string
+            enum:
+              - application/json
+        required:
+          - x-event-id
+          - x-correlation-id
+      payload:
+        $ref: '#/components/schemas/DoctorScheduleChangedEvent'
+      examples:
+        - name: DoctorScheduleChangedExample
+          payload:
+            eventId: 00000000-0000-4000-8000-000000000001
+            eventType: provider.doctor.schedule.changed.v1
+            eventVersion: 1
+            occurredAt: '2026-11-20T09:00:00Z'
+            producer: PROVIDER_RESOURCE_SERVICE
+            correlationId: 00000000-0000-4000-8000-000000000002
+            aggregateId: 00000000-0000-4000-8000-000000000003
+            aggregateVersion: 1
+            data:
+              doctorId: 00000000-0000-4000-8000-000000000010
+              scheduleId: 00000000-0000-4000-8000-000000000010
+              branchId: 00000000-0000-4000-8000-000000000010
+              startsAt: '2026-11-21T09:00:00Z'
+              endsAt: '2026-11-21T09:00:00Z'
+              changeType: PUBLISHED
+              scheduleVersion: 2
+    AppointmentCreated:
+      name: AppointmentCreated
+      title: scheduling.appointment.created.v1
+      summary: Appointment được commit thành công sau khi giữ slot nguyên tử.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          x-event-id:
+            type: string
+            format: uuid
+          x-correlation-id:
+            type: string
+          content-type:
+            type: string
+            enum:
+              - application/json
+        required:
+          - x-event-id
+          - x-correlation-id
+      payload:
+        $ref: '#/components/schemas/AppointmentCreatedEvent'
+      examples:
+        - name: AppointmentCreatedExample
+          payload:
+            eventId: 00000000-0000-4000-8000-000000000001
+            eventType: scheduling.appointment.created.v1
+            eventVersion: 1
+            occurredAt: '2026-11-20T09:00:00Z'
+            producer: SCHEDULING_QUEUE_SERVICE
+            correlationId: 00000000-0000-4000-8000-000000000002
+            aggregateId: 00000000-0000-4000-8000-000000000003
+            aggregateVersion: 1
+            data:
+              appointmentId: 00000000-0000-4000-8000-000000000010
+              patientId: 00000000-0000-4000-8000-000000000010
+              doctorId: 00000000-0000-4000-8000-000000000010
+              specialtyId: 00000000-0000-4000-8000-000000000010
+              branchId: 00000000-0000-4000-8000-000000000010
+              startsAt: '2026-11-21T09:00:00Z'
+              endsAt: '2026-11-21T09:00:00Z'
+              timezone: Asia/Ho_Chi_Minh
+              bookingSource: ONLINE
+              appointmentStatus: CONFIRMED
+    AppointmentConfirmed:
+      name: AppointmentConfirmed
+      title: scheduling.appointment.confirmed.v1
+      summary: Lịch hẹn chuyển sang CONFIRMED (nếu cơ sở áp dụng bước xác nhận riêng).
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          x-event-id:
+            type: string
+            format: uuid
+          x-correlation-id:
+            type: string
+          content-type:
+            type: string
+            enum:
+              - application/json
+        required:
+          - x-event-id
+          - x-correlation-id
+      payload:
+        $ref: '#/components/schemas/AppointmentConfirmedEvent'
+      examples:
+        - name: AppointmentConfirmedExample
+          payload:
+            eventId: 00000000-0000-4000-8000-000000000001
+            eventType: scheduling.appointment.confirmed.v1
+            eventVersion: 1
+            occurredAt: '2026-11-20T09:00:00Z'
+            producer: SCHEDULING_QUEUE_SERVICE
+            correlationId: 00000000-0000-4000-8000-000000000002
+            aggregateId: 00000000-0000-4000-8000-000000000003
+            aggregateVersion: 1
+            data:
+              appointmentId: 00000000-0000-4000-8000-000000000010
+              patientId: 00000000-0000-4000-8000-000000000010
+              doctorId: 00000000-0000-4000-8000-000000000010
+              confirmedAt: '2026-11-21T09:00:00Z'
+    AppointmentRescheduled:
+      name: AppointmentRescheduled
+      title: scheduling.appointment.rescheduled.v1
+      summary: Đổi lịch đã hoàn tất; slot mới đã được giữ thành công và slot cũ được giải phóng trong giao dịch.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          x-event-id:
+            type: string
+            format: uuid
+          x-correlation-id:
+            type: string
+          content-type:
+            type: string
+            enum:
+              - application/json
+        required:
+          - x-event-id
+          - x-correlation-id
+      payload:
+        $ref: '#/components/schemas/AppointmentRescheduledEvent'
+      examples:
+        - name: AppointmentRescheduledExample
+          payload:
+            eventId: 00000000-0000-4000-8000-000000000001
+            eventType: scheduling.appointment.rescheduled.v1
+            eventVersion: 1
+            occurredAt: '2026-11-20T09:00:00Z'
+            producer: SCHEDULING_QUEUE_SERVICE
+            correlationId: 00000000-0000-4000-8000-000000000002
+            aggregateId: 00000000-0000-4000-8000-000000000003
+            aggregateVersion: 1
+            data:
+              appointmentId: 00000000-0000-4000-8000-000000000010
+              patientId: 00000000-0000-4000-8000-000000000010
+              doctorId: 00000000-0000-4000-8000-000000000010
+              oldStartsAt: '2026-11-21T09:00:00Z'
+              oldEndsAt: '2026-11-21T09:00:00Z'
+              newStartsAt: '2026-11-21T09:00:00Z'
+              newEndsAt: '2026-11-21T09:00:00Z'
+              branchId: 00000000-0000-4000-8000-000000000010
+              changedByUserId: 00000000-0000-4000-8000-000000000010
+    AppointmentCancelled:
+      name: AppointmentCancelled
+      title: scheduling.appointment.cancelled.v1
+      summary: Appointment chuyển sang CANCELLED và slot được giải phóng thành công.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          x-event-id:
+            type: string
+            format: uuid
+          x-correlation-id:
+            type: string
+          content-type:
+            type: string
+            enum:
+              - application/json
+        required:
+          - x-event-id
+          - x-correlation-id
+      payload:
+        $ref: '#/components/schemas/AppointmentCancelledEvent'
+      examples:
+        - name: AppointmentCancelledExample
+          payload:
+            eventId: 00000000-0000-4000-8000-000000000001
+            eventType: scheduling.appointment.cancelled.v1
+            eventVersion: 1
+            occurredAt: '2026-11-20T09:00:00Z'
+            producer: SCHEDULING_QUEUE_SERVICE
+            correlationId: 00000000-0000-4000-8000-000000000002
+            aggregateId: 00000000-0000-4000-8000-000000000003
+            aggregateVersion: 1
+            data:
+              appointmentId: 00000000-0000-4000-8000-000000000010
+              patientId: 00000000-0000-4000-8000-000000000010
+              doctorId: 00000000-0000-4000-8000-000000000010
+              startsAt: '2026-11-21T09:00:00Z'
+              cancelledAt: '2026-11-21T09:00:00Z'
+              cancelledByUserId: 00000000-0000-4000-8000-000000000010
+    AppointmentExpired:
+      name: AppointmentExpired
+      title: scheduling.appointment.expired.v1
+      summary: Appointment/slot reservation hết hạn theo chính sách.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          x-event-id:
+            type: string
+            format: uuid
+          x-correlation-id:
+            type: string
+          content-type:
+            type: string
+            enum:
+              - application/json
+        required:
+          - x-event-id
+          - x-correlation-id
+      payload:
+        $ref: '#/components/schemas/AppointmentExpiredEvent'
+      examples:
+        - name: AppointmentExpiredExample
+          payload:
+            eventId: 00000000-0000-4000-8000-000000000001
+            eventType: scheduling.appointment.expired.v1
+            eventVersion: 1
+            occurredAt: '2026-11-20T09:00:00Z'
+            producer: SCHEDULING_QUEUE_SERVICE
+            correlationId: 00000000-0000-4000-8000-000000000002
+            aggregateId: 00000000-0000-4000-8000-000000000003
+            aggregateVersion: 1
+            data:
+              appointmentId: 00000000-0000-4000-8000-000000000010
+              patientId: 00000000-0000-4000-8000-000000000010
+              expiredAt: '2026-11-21T09:00:00Z'
+              reasonCode: SCHEDULE_UPDATED
+    PatientCheckedIn:
+      name: PatientCheckedIn
+      title: queue.patient.checked-in.v1
+      summary: Lễ tân xác nhận có mặt; Queue Ticket được tạo hoặc chuyển WAITING.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          x-event-id:
+            type: string
+            format: uuid
+          x-correlation-id:
+            type: string
+          content-type:
+            type: string
+            enum:
+              - application/json
+        required:
+          - x-event-id
+          - x-correlation-id
+      payload:
+        $ref: '#/components/schemas/PatientCheckedInEvent'
+      examples:
+        - name: PatientCheckedInExample
+          payload:
+            eventId: 00000000-0000-4000-8000-000000000001
+            eventType: queue.patient.checked-in.v1
+            eventVersion: 1
+            occurredAt: '2026-11-20T09:00:00Z'
+            producer: SCHEDULING_QUEUE_SERVICE
+            correlationId: 00000000-0000-4000-8000-000000000002
+            aggregateId: 00000000-0000-4000-8000-000000000003
+            aggregateVersion: 1
+            data:
+              queueTicketId: 00000000-0000-4000-8000-000000000010
+              patientId: 00000000-0000-4000-8000-000000000010
+              doctorId: 00000000-0000-4000-8000-000000000010
+              branchId: 00000000-0000-4000-8000-000000000010
+              checkedInAt: '2026-11-21T09:00:00Z'
+              source: APPOINTMENT
+              ticketNumber: A012
+    WalkInRegistered:
+      name: WalkInRegistered
+      title: queue.walk-in.registered.v1
+      summary: Lễ tân tiếp nhận bệnh nhân đến trực tiếp không có Appointment.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          x-event-id:
+            type: string
+            format: uuid
+          x-correlation-id:
+            type: string
+          content-type:
+            type: string
+            enum:
+              - application/json
+        required:
+          - x-event-id
+          - x-correlation-id
+      payload:
+        $ref: '#/components/schemas/WalkInRegisteredEvent'
+      examples:
+        - name: WalkInRegisteredExample
+          payload:
+            eventId: 00000000-0000-4000-8000-000000000001
+            eventType: queue.walk-in.registered.v1
+            eventVersion: 1
+            occurredAt: '2026-11-20T09:00:00Z'
+            producer: SCHEDULING_QUEUE_SERVICE
+            correlationId: 00000000-0000-4000-8000-000000000002
+            aggregateId: 00000000-0000-4000-8000-000000000003
+            aggregateVersion: 1
+            data:
+              queueTicketId: 00000000-0000-4000-8000-000000000010
+              patientId: 00000000-0000-4000-8000-000000000010
+              doctorId: 00000000-0000-4000-8000-000000000010
+              specialtyId: 00000000-0000-4000-8000-000000000010
+              branchId: 00000000-0000-4000-8000-000000000010
+              ticketNumber: A012
+              queueDate: '2026-11-21'
+              registeredAt: '2026-11-21T09:00:00Z'
+    QueueTicketCalled:
+      name: QueueTicketCalled
+      title: queue.ticket.called.v1
+      summary: Bác sĩ gọi lượt đủ điều kiện; trạng thái ticket chuyển CALLED.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          x-event-id:
+            type: string
+            format: uuid
+          x-correlation-id:
+            type: string
+          content-type:
+            type: string
+            enum:
+              - application/json
+        required:
+          - x-event-id
+          - x-correlation-id
+      payload:
+        $ref: '#/components/schemas/QueueTicketCalledEvent'
+      examples:
+        - name: QueueTicketCalledExample
+          payload:
+            eventId: 00000000-0000-4000-8000-000000000001
+            eventType: queue.ticket.called.v1
+            eventVersion: 1
+            occurredAt: '2026-11-20T09:00:00Z'
+            producer: SCHEDULING_QUEUE_SERVICE
+            correlationId: 00000000-0000-4000-8000-000000000002
+            aggregateId: 00000000-0000-4000-8000-000000000003
+            aggregateVersion: 1
+            data:
+              queueTicketId: 00000000-0000-4000-8000-000000000010
+              patientId: 00000000-0000-4000-8000-000000000010
+              doctorId: 00000000-0000-4000-8000-000000000010
+              branchId: 00000000-0000-4000-8000-000000000010
+              roomId: 00000000-0000-4000-8000-000000000010
+              ticketNumber: A012
+              calledAt: '2026-11-21T09:00:00Z'
+              callSequence: 1
+    QueueTicketStarted:
+      name: QueueTicketStarted
+      title: queue.ticket.started.v1
+      summary: Bác sĩ xác nhận bắt đầu khám; ticket chuyển IN_PROGRESS.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          x-event-id:
+            type: string
+            format: uuid
+          x-correlation-id:
+            type: string
+          content-type:
+            type: string
+            enum:
+              - application/json
+        required:
+          - x-event-id
+          - x-correlation-id
+      payload:
+        $ref: '#/components/schemas/QueueTicketStartedEvent'
+      examples:
+        - name: QueueTicketStartedExample
+          payload:
+            eventId: 00000000-0000-4000-8000-000000000001
+            eventType: queue.ticket.started.v1
+            eventVersion: 1
+            occurredAt: '2026-11-20T09:00:00Z'
+            producer: SCHEDULING_QUEUE_SERVICE
+            correlationId: 00000000-0000-4000-8000-000000000002
+            aggregateId: 00000000-0000-4000-8000-000000000003
+            aggregateVersion: 1
+            data:
+              queueTicketId: 00000000-0000-4000-8000-000000000010
+              patientId: 00000000-0000-4000-8000-000000000010
+              doctorId: 00000000-0000-4000-8000-000000000010
+              branchId: 00000000-0000-4000-8000-000000000010
+              roomId: 00000000-0000-4000-8000-000000000010
+              startedAt: '2026-11-21T09:00:00Z'
+    QueueTicketCompleted:
+      name: QueueTicketCompleted
+      title: queue.ticket.completed.v1
+      summary: Bác sĩ hoàn tất lượt và ticket chuyển COMPLETED.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          x-event-id:
+            type: string
+            format: uuid
+          x-correlation-id:
+            type: string
+          content-type:
+            type: string
+            enum:
+              - application/json
+        required:
+          - x-event-id
+          - x-correlation-id
+      payload:
+        $ref: '#/components/schemas/QueueTicketCompletedEvent'
+      examples:
+        - name: QueueTicketCompletedExample
+          payload:
+            eventId: 00000000-0000-4000-8000-000000000001
+            eventType: queue.ticket.completed.v1
+            eventVersion: 1
+            occurredAt: '2026-11-20T09:00:00Z'
+            producer: SCHEDULING_QUEUE_SERVICE
+            correlationId: 00000000-0000-4000-8000-000000000002
+            aggregateId: 00000000-0000-4000-8000-000000000003
+            aggregateVersion: 1
+            data:
+              queueTicketId: 00000000-0000-4000-8000-000000000010
+              patientId: 00000000-0000-4000-8000-000000000010
+              doctorId: 00000000-0000-4000-8000-000000000010
+              branchId: 00000000-0000-4000-8000-000000000010
+              completedAt: '2026-11-21T09:00:00Z'
+              completionCode: NORMAL
+    QueueTicketDispatched:
+      name: QueueTicketDispatched
+      title: queue.ticket.dispatched.v1
+      summary: Lễ tân điều phối lượt đang chờ sang bác sĩ/phòng phù hợp.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          x-event-id:
+            type: string
+            format: uuid
+          x-correlation-id:
+            type: string
+          content-type:
+            type: string
+            enum:
+              - application/json
+        required:
+          - x-event-id
+          - x-correlation-id
+      payload:
+        $ref: '#/components/schemas/QueueTicketDispatchedEvent'
+      examples:
+        - name: QueueTicketDispatchedExample
+          payload:
+            eventId: 00000000-0000-4000-8000-000000000001
+            eventType: queue.ticket.dispatched.v1
+            eventVersion: 1
+            occurredAt: '2026-11-20T09:00:00Z'
+            producer: SCHEDULING_QUEUE_SERVICE
+            correlationId: 00000000-0000-4000-8000-000000000002
+            aggregateId: 00000000-0000-4000-8000-000000000003
+            aggregateVersion: 1
+            data:
+              queueTicketId: 00000000-0000-4000-8000-000000000010
+              patientId: 00000000-0000-4000-8000-000000000010
+              branchId: 00000000-0000-4000-8000-000000000010
+              toDoctorId: 00000000-0000-4000-8000-000000000010
+              dispatchedAt: '2026-11-21T09:00:00Z'
+              actorUserId: 00000000-0000-4000-8000-000000000010
+              reasonCode: SCHEDULE_UPDATED
+    QueueTicketReordered:
+      name: QueueTicketReordered
+      title: queue.ticket.reordered.v1
+      summary: Lễ tân thay đổi thứ tự theo quyền và có lý do.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          x-event-id:
+            type: string
+            format: uuid
+          x-correlation-id:
+            type: string
+          content-type:
+            type: string
+            enum:
+              - application/json
+        required:
+          - x-event-id
+          - x-correlation-id
+      payload:
+        $ref: '#/components/schemas/QueueTicketReorderedEvent'
+      examples:
+        - name: QueueTicketReorderedExample
+          payload:
+            eventId: 00000000-0000-4000-8000-000000000001
+            eventType: queue.ticket.reordered.v1
+            eventVersion: 1
+            occurredAt: '2026-11-20T09:00:00Z'
+            producer: SCHEDULING_QUEUE_SERVICE
+            correlationId: 00000000-0000-4000-8000-000000000002
+            aggregateId: 00000000-0000-4000-8000-000000000003
+            aggregateVersion: 1
+            data:
+              queueTicketId: 00000000-0000-4000-8000-000000000010
+              patientId: 00000000-0000-4000-8000-000000000010
+              doctorId: 00000000-0000-4000-8000-000000000010
+              branchId: 00000000-0000-4000-8000-000000000010
+              previousPosition: 5
+              newPosition: 2
+              reasonCode: SCHEDULE_UPDATED
+              actorUserId: 00000000-0000-4000-8000-000000000010
+              changedAt: '2026-11-21T09:00:00Z'
+    DoctorOperationalStatusChanged:
+      name: DoctorOperationalStatusChanged
+      title: queue.doctor.operational-status.changed.v1
+      summary: Trạng thái vận hành bác sĩ thay đổi trong phạm vi hàng đợi.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          x-event-id:
+            type: string
+            format: uuid
+          x-correlation-id:
+            type: string
+          content-type:
+            type: string
+            enum:
+              - application/json
+        required:
+          - x-event-id
+          - x-correlation-id
+      payload:
+        $ref: '#/components/schemas/DoctorOperationalStatusChangedEvent'
+      examples:
+        - name: DoctorOperationalStatusChangedExample
+          payload:
+            eventId: 00000000-0000-4000-8000-000000000001
+            eventType: queue.doctor.operational-status.changed.v1
+            eventVersion: 1
+            occurredAt: '2026-11-20T09:00:00Z'
+            producer: SCHEDULING_QUEUE_SERVICE
+            correlationId: 00000000-0000-4000-8000-000000000002
+            aggregateId: 00000000-0000-4000-8000-000000000003
+            aggregateVersion: 1
+            data:

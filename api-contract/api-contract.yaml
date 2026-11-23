@@ -1,0 +1,1497 @@
+openapi: 3.1.0
+info:
+  title: Clinic Appointment & Real-time Queue Management API
+  version: 1.0.0
+  description: Implementation-oriented API contract for the 6 PostgreSQL-backed Microservices. API Gateway is an independent edge component and the only public entry point. Every protected operation declares x-required-permissions or x-any-of-permissions and x-data-scope. Wire properties use camelCase; persistence columns remain snake_case. This contract is derived from the six bootstrap SQL schemas and the service function specification. Some business permissions must be seeded into IAM; see matrix-api.md.
+  contact:
+    name: Project API Team
+servers:
+  - url: http://localhost:8080
+    description: Local API Gateway via Docker Compose
+  - url: https://api.example.com
+    description: Environment placeholder; replace before deployment
+tags:
+  - name: Identity & Access
+    description: Authentication, credentials, roles, permissions and sessions.
+  - name: Patient profiles
+    description: Administrative patient profiles and contact details.
+  - name: Hospital resources
+    description: Hospital catalogue, doctors, rooms, specialties and working schedules.
+  - name: Scheduling
+    description: Appointment slots, reservations, appointments, check-in and queues.
+  - name: Clinical records
+    description: Medical encounters, diagnoses, tests, prescriptions and published records.
+  - name: Notifications & reminders
+    description: Notifications, delivery channels, scheduled reminders and worker operations.
+paths:
+  /api/v1/auth/register:
+    post:
+      operationId: registerPatient
+      summary: Đăng ký tài khoản bệnh nhân
+      description: Tạo user PATIENT; sau khi tạo identity thành công, gọi Consumer Service tạo patient profile bằng saga/outbox. Không trả password hash.
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions: []
+      x-data-scope: PUBLIC
+      x-idempotency-required: true
+      x-empty-state: —
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Tạo resource thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TokenPair'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      x-idempotency-key-scope: authenticated-principal-or-public-client + operationId + Idempotency-Key
+      x-idempotency-replay: Same key and same request payload returns the original result; same key with different payload returns 409 IDEMPOTENCY_KEY_REUSED.
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      summary: Đăng nhập và cấp token
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions: []
+      x-data-scope: PUBLIC
+      x-idempotency-required: false
+      x-empty-state: —
+      parameters: []
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TokenPair'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/refresh:
+    post:
+      operationId: refreshSession
+      summary: Làm mới access token
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions: []
+      x-data-scope: PUBLIC
+      x-idempotency-required: false
+      x-empty-state: —
+      parameters: []
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TokenPair'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      summary: Đăng xuất và thu hồi refresh token
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions:
+        - account.self.update
+      x-data-scope: SELF
+      x-idempotency-required: false
+      x-empty-state: —
+      x-permission-logic: ALL
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ActionResponse'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/forgot-password:
+    post:
+      operationId: forgotPassword
+      summary: Yêu cầu khôi phục mật khẩu
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions: []
+      x-data-scope: PUBLIC
+      x-idempotency-required: false
+      x-empty-state: —
+      parameters: []
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '202':
+          description: Đã chấp nhận tác vụ; xử lý bất đồng bộ.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ActionResponse'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/reset-password:
+    post:
+      operationId: resetPassword
+      summary: Đặt lại mật khẩu bằng token
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions: []
+      x-data-scope: PUBLIC
+      x-idempotency-required: false
+      x-empty-state: —
+      parameters: []
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ActionResponse'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/me:
+    get:
+      operationId: getCurrentAccount
+      summary: Lấy tài khoản hiện tại
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions:
+        - account.self.read
+      x-data-scope: SELF
+      x-idempotency-required: false
+      x-empty-state: 401 nếu không có principal
+      parameters: []
+      x-permission-logic: ALL
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UserSafe'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/auth/me/password:
+    patch:
+      operationId: changeOwnPassword
+      summary: Đổi mật khẩu tài khoản hiện tại
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions:
+        - account.self.update
+      x-data-scope: SELF
+      x-idempotency-required: false
+      x-empty-state: —
+      parameters: []
+      x-permission-logic: ALL
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ActionResponse'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/admin/users:
+    get:
+      operationId: listUsers
+      summary: Liệt kê users
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions:
+        - account.manage
+      x-data-scope: REQUIRED
+      x-idempotency-required: false
+      x-empty-state: 200 data.items=[]
+      parameters:
+        - in: query
+          name: page
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+          description: Số trang, bắt đầu từ 0
+        - in: query
+          name: size
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: Số bản ghi mỗi trang, mặc định 20, tối đa 100
+        - in: query
+          name: sort
+          required: false
+          schema:
+            type: string
+          description: Trường và hướng sắp xếp cho phép
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+          description: PENDING, ACTIVE, LOCKED, DISABLED
+        - in: query
+          name: roleCode
+          required: false
+          schema:
+            type: string
+          description: Lọc theo role
+        - in: query
+          name: keyword
+          required: false
+          schema:
+            type: string
+          description: Tìm username/email/phone/userId
+      x-permission-logic: ALL
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageUsers'
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      operationId: createUser
+      summary: Tạo user
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions:
+        - account.manage
+      x-data-scope: REQUIRED
+      x-idempotency-required: true
+      x-empty-state: —
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      x-permission-logic: ALL
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUsersRequest'
+      responses:
+        '201':
+          description: Tạo resource thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Users'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      x-idempotency-key-scope: authenticated-principal-or-public-client + operationId + Idempotency-Key
+      x-idempotency-replay: Same key and same request payload returns the original result; same key with different payload returns 409 IDEMPOTENCY_KEY_REUSED.
+  /api/v1/admin/users/{userId}:
+    get:
+      operationId: getUser
+      summary: Lấy chi tiết user
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions:
+        - account.manage
+      x-data-scope: REQUIRED
+      x-idempotency-required: false
+      x-empty-state: 404 resource not found
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID định danh userId.
+      x-permission-logic: ALL
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Users'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    patch:
+      operationId: updateUser
+      summary: Cập nhật user
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions:
+        - account.manage
+      x-data-scope: REQUIRED
+      x-idempotency-required: false
+      x-empty-state: 404 resource not found
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID định danh userId.
+      x-permission-logic: ALL
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchUsersRequest'
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Users'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/admin/users/{userId}/status:
+    patch:
+      operationId: setUserStatus
+      summary: Khóa, mở khóa hoặc đổi trạng thái tài khoản
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions:
+        - account.manage
+      x-data-scope: GLOBAL
+      x-idempotency-required: false
+      x-empty-state: 404 user not found
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID định danh userId.
+      x-permission-logic: ALL
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatusChangeRequest'
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UserSafe'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/admin/roles:
+    get:
+      operationId: listRoles
+      summary: Liệt kê roles
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions:
+        - role.manage
+      x-data-scope: REQUIRED
+      x-idempotency-required: false
+      x-empty-state: 200 data.items=[]
+      parameters:
+        - in: query
+          name: page
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+          description: Số trang, bắt đầu từ 0
+        - in: query
+          name: size
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: Số bản ghi mỗi trang, mặc định 20, tối đa 100
+        - in: query
+          name: sort
+          required: false
+          schema:
+            type: string
+          description: Trường và hướng sắp xếp cho phép
+        - in: query
+          name: isSystem
+          required: false
+          schema:
+            type: boolean
+          description: Lọc role hệ thống
+      x-permission-logic: ALL
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageRoles'
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      operationId: createRole
+      summary: Tạo role
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions:
+        - role.manage
+      x-data-scope: REQUIRED
+      x-idempotency-required: true
+      x-empty-state: —
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      x-permission-logic: ALL
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRolesRequest'
+      responses:
+        '201':
+          description: Tạo resource thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Roles'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+      x-idempotency-key-scope: authenticated-principal-or-public-client + operationId + Idempotency-Key
+      x-idempotency-replay: Same key and same request payload returns the original result; same key with different payload returns 409 IDEMPOTENCY_KEY_REUSED.
+  /api/v1/admin/roles/{roleId}:
+    get:
+      operationId: getRole
+      summary: Lấy chi tiết role
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions:
+        - role.manage
+      x-data-scope: REQUIRED
+      x-idempotency-required: false
+      x-empty-state: 404 resource not found
+      parameters:
+        - in: path
+          name: roleId
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID định danh roleId.
+      x-permission-logic: ALL
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Roles'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    patch:
+      operationId: updateRole
+      summary: Cập nhật role
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+        - Identity & Access
+      x-owner-service: Identity & Access Service
+      x-required-permissions:
+        - role.manage
+      x-data-scope: REQUIRED
+      x-idempotency-required: false
+      x-empty-state: 404 resource not found
+      parameters:
+        - in: path
+          name: roleId
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID định danh roleId.
+      x-permission-logic: ALL
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchRolesRequest'
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Roles'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
