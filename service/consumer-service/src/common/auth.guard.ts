@@ -1,0 +1,86 @@
+import {
+  CanActivate,
+  ExecutionContext,
+  HttpStatus,
+  Injectable,
+} from '@nestjs/common';
+import * as jwt from 'jsonwebtoken';
+import { ProblemException } from './problem-details';
+
+export interface Principal {
+  userId: string;
+  roles: string[];
+  permissions: string[];
+  assignedPatientIds?: string[];
+}
+
+export interface AuthenticatedRequest {
+  principal?: Principal;
+  traceId?: string;
+  headers: Record<string, string | string[] | undefined>;
+}
+
+/**
+ * Verifies Bearer JWT issued by Identity & Access Service and attaches `req.principal`.
+ */
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const req = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const authHeader = req.headers['authorization'];
+    if (typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
+      throw new ProblemException(
+        HttpStatus.UNAUTHORIZED,
+        'UNAUTHORIZED',
+        'Thiếu hoặc sai định dạng Bearer token.',
+      );
+    }
+
+    const token = authHeader.slice('Bearer '.length).trim();
+    if (!token) {
+      throw new ProblemException(
+        HttpStatus.UNAUTHORIZED,
+        'UNAUTHORIZED',
+        'Bearer token rỗng.',
+      );
+    }
+
+    const secret = process.env.JWT_SIGNING_KEY || 'change-me-in-local-only';
+    try {
+      const payload = jwt.verify(token, secret, {
+        issuer: process.env.JWT_ISSUER || 'https://identity.medibook.local',
+        audience: process.env.JWT_AUDIENCE || 'medibook-api',
+      }) as jwt.JwtPayload;
+
+      const userId = typeof payload.sub === 'string'
+        ? payload.sub
+        : typeof payload.userId === 'string'
+          ? payload.userId
+          : '';
+      if (!userId) {
+        throw new ProblemException(
+          HttpStatus.UNAUTHORIZED,
+          'INVALID_TOKEN_SUBJECT',
+          'Token thiếu định danh người dùng.',
+        );
+      }
+
+      req.principal = {
+        userId,
+        roles: Array.isArray(payload.roles) ? payload.roles.map(String) : [],
+        permissions: Array.isArray(payload.permissions) ? payload.permissions.map(String) : [],
+        assignedPatientIds: Array.isArray(payload.assignedPatientIds)
+          ? payload.assignedPatientIds.map(String)
+          : undefined,
+      };
+      return true;
+    } catch (err) {
+      if (err instanceof ProblemException) throw err;
+      throw new ProblemException(
+        HttpStatus.UNAUTHORIZED,
+        'INVALID_OR_EXPIRED_TOKEN',
+        'Token không hợp lệ hoặc đã hết hạn.',
+      );
+    }
+  }
+}
