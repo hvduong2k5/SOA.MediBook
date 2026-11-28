@@ -3,10 +3,11 @@ import { RateLimitGuard } from './common/rate-limit.guard';
 import { TraceIdMiddleware } from './common/trace-id.middleware';
 import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 import { EncountersModule } from './encounters/encounters.module';
+import { EventsModule } from './events/events.module';
 import { PrescriptionsModule } from './prescriptions/prescriptions.module';
 
 @Module({
-  imports: [EncountersModule, DiagnosticsModule, PrescriptionsModule],
+  imports: [EncountersModule, DiagnosticsModule, PrescriptionsModule, EventsModule],
   providers: [RateLimitGuard],
 })
 export class AppModule implements NestModule {
