@@ -4,6 +4,7 @@ import { PoolClient } from 'pg';
 import { Principal } from '../common/auth.guard';
 import { ProblemException } from '../common/problem-details';
 import { DatabaseService } from '../db/database.service';
+import { OutboxService } from '../outbox/outbox.service';
 import { ASSIGNMENT_RESOLVER, AssignmentResolver } from './assignment.resolver';
 import {
   CreatePatientDto,
@@ -45,6 +46,7 @@ const SORT_WHITELIST: Record<string, string> = {
 export class PatientsService {
   constructor(
     private readonly db: DatabaseService,
+    private readonly outboxService: OutboxService,
     @Inject(ASSIGNMENT_RESOLVER) private readonly assignmentResolver: AssignmentResolver,
   ) {}
 
@@ -67,6 +69,7 @@ export class PatientsService {
     principal: Principal,
     idempotencyKey: string | undefined,
     dto: CreatePatientDto,
+    correlationId = 'unknown-correlation',
   ): Promise<PatientDto> {
     if (!idempotencyKey || idempotencyKey.trim().length < 8 || idempotencyKey.trim().length > 128) {
       throw new ProblemException(
@@ -160,6 +163,12 @@ export class PatientsService {
         afterData: patientDto,
         reason: dto.reason || 'Tạo hồ sơ bệnh nhân mới',
       });
+
+      await this.outboxService.enqueuePatientProfileCreated(
+        client,
+        patientDto,
+        correlationId,
+      );
 
       await client.query(
         `UPDATE idempotency_records

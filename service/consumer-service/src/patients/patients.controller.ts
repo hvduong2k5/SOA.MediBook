@@ -56,6 +56,7 @@ export class PatientsController {
       req.principal!,
       idempotencyKey,
       dto,
+      req.correlationId || req.traceId || 'unknown-correlation',
     );
     return { data, requestId: req.traceId };
   }
