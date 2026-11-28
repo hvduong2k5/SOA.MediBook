@@ -1,0 +1,34 @@
+:root {
+  /* Brand & Semantic Colors (ui-screens.md §2 / Stitch DESIGN.md) */
+  --color-primary: #1d4ed8;
+  --color-primary-hover: #1e40af;
+  --color-navy: #163a70;
+  --color-teal: #0f766e;
+  --color-success: #15803d;
+  --color-warning: #b45309;
+  --color-danger: #b91c1c;
+  --color-info: #0369a1;
+
+  /* Surfaces & Text */
+  --color-bg: #f6f8fb;
+  --color-surface: #ffffff;
+  --color-border: #e2e8f0;
+  --color-text: #172b4d;
+  --color-text-muted: #64748b;
+
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Spacing rhythm */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Radii */
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-dialog: 16px;
+}
