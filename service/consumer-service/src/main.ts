@@ -2,10 +2,13 @@ import 'reflect-metadata';
 import { HttpStatus, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { PiiSafeLogger } from './common/pii-safe-logger';
 import { ProblemDetailsFilter, ProblemException } from './common/problem-details';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: new PiiSafeLogger(),
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({

@@ -3,7 +3,7 @@ import { DatabaseService } from '../db/database.service';
 import { OutboxModule } from '../outbox/outbox.module';
 import {
   ASSIGNMENT_RESOLVER,
-  TokenClaimAssignmentResolver,
+  HttpAssignmentResolver,
 } from './assignment.resolver';
 import { PatientsController } from './patients.controller';
 import { PatientsService } from './patients.service';
@@ -19,9 +19,9 @@ import { SubresourcesService } from './subresources.service';
     SubresourcesService,
     {
       provide: ASSIGNMENT_RESOLVER,
-      useClass: TokenClaimAssignmentResolver,
+      useClass: HttpAssignmentResolver,
     },
   ],
-  exports: [PatientsService, SubresourcesService],
+  exports: [PatientsService, SubresourcesService, ASSIGNMENT_RESOLVER],
 })
 export class PatientsModule {}
