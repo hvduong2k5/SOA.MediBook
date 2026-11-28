@@ -81,9 +81,10 @@ export class PatientsService {
 
     this.validateDateOfBirth(dto.dateOfBirth);
     const trimmedKey = idempotencyKey.trim();
-    const principalKey = `user:${principal.userId}`;
+    const principalKey = principal.principalKey;
     const operationScope = 'createPatient';
     const requestHash = this.hashPayload(dto);
+    const actorUuid = principal.isService ? (dto.userId ?? null) : principal.userId;
 
     return this.db.withTransaction(async (client) => {
       // Lock or insert idempotency record
@@ -119,6 +120,32 @@ export class PatientsService {
         );
       }
 
+      // Saga idempotency by userId for service-to-service registration retries
+      if (principal.isService && dto.userId) {
+        const existingByUser = await client.query<PatientRow>(
+          `SELECT * FROM patients WHERE user_id = $1 LIMIT 1`,
+          [dto.userId],
+        );
+        if (existingByUser.rowCount && existingByUser.rowCount > 0) {
+          const existingDto = this.toDto(existingByUser.rows[0]);
+          await client.query(
+            `INSERT INTO idempotency_records (
+              principal_key, operation_scope, idempotency_key, request_hash, state,
+              response_status, response_body_encrypted, resource_type, resource_id, completed_at
+            ) VALUES ($1, $2, $3, $4, 'COMPLETED', 201, $5, 'Patient', $6, now())`,
+            [
+              principalKey,
+              operationScope,
+              trimmedKey,
+              requestHash,
+              Buffer.from(JSON.stringify(existingDto), 'utf8'),
+              existingDto.patientId,
+            ],
+          );
+          return existingDto;
+        }
+      }
+
       await client.query(
         `INSERT INTO idempotency_records (principal_key, operation_scope, idempotency_key, request_hash, state)
          VALUES ($1, $2, $3, $4, 'IN_PROGRESS')`,
@@ -144,7 +171,7 @@ export class PatientsService {
             dto.gender ?? PatientGender.UNKNOWN,
             dto.profileStatus ?? PatientProfileStatus.ACTIVE,
             dto.note ?? null,
-            principal.userId,
+            actorUuid,
           ],
         );
         inserted = res.rows[0];
@@ -157,7 +184,7 @@ export class PatientsService {
 
       await this.insertAudit(client, {
         patientId: patientDto.patientId,
-        actorUserId: principal.userId,
+        actorUserId: actorUuid,
         actionCode: 'CREATE',
         beforeData: null,
         afterData: patientDto,
@@ -210,22 +237,29 @@ export class PatientsService {
     const conditions: string[] = [];
     const params: unknown[] = [];
 
-    if (!hasAll) {
-      if (!hasAssigned) {
+    const isReceptionistBranch =
+      principal.roles.includes('RECEPTIONIST') &&
+      !principal.roles.includes('ADMIN') &&
+      (Boolean(process.env.SCHEDULING_SERVICE_URL?.trim()) ||
+        principal.branchPatientIds !== undefined);
+
+    if (!hasAll || isReceptionistBranch) {
+      if (!hasAll && !hasAssigned) {
         throw new ProblemException(
           HttpStatus.FORBIDDEN,
           'INSUFFICIENT_PERMISSION',
           'Thiếu quyền xem danh sách bệnh nhân.',
         );
       }
-      const assignedIds = await this.assignmentResolver.getAssignedPatientIds(principal);
-      if (assignedIds.length === 0) {
+      const scopeMode = isReceptionistBranch ? 'BRANCH' : 'ASSIGNED';
+      const scopedIds = await this.assignmentResolver.getScopedPatientIds(principal, scopeMode);
+      if (scopedIds.length === 0) {
         return {
           data: [],
           meta: { page, size, totalElements: 0, totalPages: 0 },
         };
       }
-      params.push(assignedIds);
+      params.push(scopedIds);
       conditions.push(`p.patient_id = ANY($${params.length}::uuid[])`);
     }
 
@@ -302,11 +336,27 @@ export class PatientsService {
     const patient = res.rows[0];
     const perms = new Set(principal.permissions);
 
+    const isReceptionistBranch =
+      principal.roles.includes('RECEPTIONIST') &&
+      !principal.roles.includes('ADMIN') &&
+      (Boolean(process.env.SCHEDULING_SERVICE_URL?.trim()) ||
+        principal.branchPatientIds !== undefined);
+
     const allowed =
-      perms.has('patient.read.all') ||
+      (perms.has('patient.read.all') &&
+        (!isReceptionistBranch ||
+          (await this.assignmentResolver.isPatientInScope(
+            principal,
+            patient.patient_id,
+            'BRANCH',
+          )))) ||
       (perms.has('patient.read.self') && patient.user_id === principal.userId) ||
       (perms.has('patient.read.assigned') &&
-        (await this.assignmentResolver.isPatientAssigned(principal, patient.patient_id)));
+        (await this.assignmentResolver.isPatientInScope(
+          principal,
+          patient.patient_id,
+          'ASSIGNED',
+        )));
 
     if (!allowed) {
       throw new ProblemException(
@@ -446,7 +496,7 @@ export class PatientsService {
     client: PoolClient,
     input: {
       patientId: string;
-      actorUserId: string;
+      actorUserId: string | null;
       actionCode: string;
       beforeData: PatientDto | null;
       afterData: PatientDto;

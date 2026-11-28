@@ -187,16 +187,24 @@ describe('Consumer Service - Transactional Outbox (#14) E2E', () => {
     const secondRun = await publisher.processBatch();
     expect(secondRun).toBe(0);
 
-    // Verify RabbitMQ queue received the message
+    // Verify RabbitMQ queue received the message (drain any prior test messages)
     const conn = await amqp.connect(RMQ_URL);
     const ch = await conn.createChannel();
-    const msg = await ch.get('q.notification.patient-profile-created', { noAck: true });
-    expect(msg).not.toBe(false);
-    if (msg) {
-      const parsed = JSON.parse(msg.content.toString('utf8'));
-      expect(parsed.eventId).toBe(row.event_id);
-      expect(parsed.correlationId).toBe(corrId);
-      expect(Object.keys(parsed.data).sort()).toEqual([
+    let matched: Record<string, unknown> | null = null;
+    for (let i = 0; i < 10; i++) {
+      const msg = await ch.get('q.notification.patient-profile-created', { noAck: true });
+      if (!msg) break;
+      const parsed = JSON.parse(msg.content.toString('utf8')) as Record<string, unknown>;
+      if (parsed.eventId === row.event_id) {
+        matched = parsed;
+        break;
+      }
+    }
+    expect(matched).not.toBeNull();
+    if (matched) {
+      expect(matched.eventId).toBe(row.event_id);
+      expect(matched.correlationId).toBe(corrId);
+      expect(Object.keys(matched.data as Record<string, unknown>).sort()).toEqual([
         'createdAt',
         'patientCode',
         'patientId',

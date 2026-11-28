@@ -50,20 +50,31 @@ export async function ensurePatientAccess(
   const row = res.rows[0];
   const perms = new Set(principal.permissions);
 
+  const isReceptionistBranch =
+    principal.roles.includes('RECEPTIONIST') &&
+    !principal.roles.includes('ADMIN') &&
+    (Boolean(process.env.SCHEDULING_SERVICE_URL?.trim()) ||
+      principal.branchPatientIds !== undefined);
+
   let allowed = false;
   if (mode === 'SELF_OR_ASSIGNED') {
-    allowed =
+    const hasGlobalOrBranch =
       (manageAllPermission ? perms.has(manageAllPermission) : false) ||
-      perms.has('patient.read.all') ||
+      perms.has('patient.read.all');
+    allowed =
+      (hasGlobalOrBranch &&
+        (!isReceptionistBranch ||
+          (await assignmentResolver.isPatientInScope(principal, patientId, 'BRANCH')))) ||
       (row.user_id !== null && row.user_id === principal.userId) ||
-      (await assignmentResolver.isPatientAssigned(principal, patientId));
+      (await assignmentResolver.isPatientInScope(principal, patientId, 'ASSIGNED'));
   } else {
     // ASSIGNED_OR_GLOBAL
     allowed =
-      perms.has('patient.read.all') ||
-      perms.has('patient.update.all') ||
       principal.roles.includes('ADMIN') ||
-      (await assignmentResolver.isPatientAssigned(principal, patientId));
+      ((perms.has('patient.read.all') || perms.has('patient.update.all')) &&
+        (!isReceptionistBranch ||
+          (await assignmentResolver.isPatientInScope(principal, patientId, 'BRANCH')))) ||
+      (await assignmentResolver.isPatientInScope(principal, patientId, 'ASSIGNED'));
   }
 
   if (!allowed) {
