@@ -4,12 +4,31 @@
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TYPE patient_gender AS ENUM ('MALE', 'FEMALE', 'OTHER', 'UNKNOWN');
-CREATE TYPE patient_profile_status AS ENUM ('ACTIVE', 'INACTIVE', 'PENDING_VERIFICATION');
-CREATE TYPE patient_contact_type AS ENUM ('PHONE', 'EMAIL');
-CREATE TYPE patient_address_type AS ENUM ('HOME', 'MAILING', 'OTHER');
+DO $$ BEGIN
+    CREATE TYPE patient_gender AS ENUM ('MALE', 'FEMALE', 'OTHER', 'UNKNOWN');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE patients (
+DO $$ BEGIN
+    CREATE TYPE patient_profile_status AS ENUM ('ACTIVE', 'INACTIVE', 'PENDING_VERIFICATION');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE patient_contact_type AS ENUM ('PHONE', 'EMAIL');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE patient_address_type AS ENUM ('HOME', 'MAILING', 'OTHER');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS patients (
     patient_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     patient_code        VARCHAR(40) NOT NULL UNIQUE,
     user_id             UUID UNIQUE, -- External reference to Identity & Access Service; nullable for walk-in patients.
@@ -26,10 +45,12 @@ CREATE TABLE patients (
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX ix_patients_name ON patients (lower(last_name), lower(first_name));
-CREATE INDEX ix_patients_created_at ON patients (created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_patients_name ON patients (lower(last_name), lower(first_name));
+CREATE INDEX IF NOT EXISTS ix_patients_first_name_lower ON patients (lower(first_name));
+CREATE INDEX IF NOT EXISTS ix_patients_code_lower ON patients (lower(patient_code));
+CREATE INDEX IF NOT EXISTS ix_patients_created_at ON patients (created_at DESC);
 
-CREATE TABLE patient_contacts (
+CREATE TABLE IF NOT EXISTS patient_contacts (
     contact_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     patient_id      UUID NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
     contact_type    patient_contact_type NOT NULL,
@@ -41,11 +62,11 @@ CREATE TABLE patient_contacts (
     UNIQUE (patient_id, contact_type, contact_value)
 );
 
-CREATE UNIQUE INDEX uq_patient_primary_contact_type
+CREATE UNIQUE INDEX IF NOT EXISTS uq_patient_primary_contact_type
     ON patient_contacts (patient_id, contact_type) WHERE is_primary;
-CREATE INDEX ix_patient_contacts_value ON patient_contacts (contact_type, lower(contact_value));
+CREATE INDEX IF NOT EXISTS ix_patient_contacts_value ON patient_contacts (contact_type, lower(contact_value));
 
-CREATE TABLE patient_addresses (
+CREATE TABLE IF NOT EXISTS patient_addresses (
     address_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     patient_id       UUID NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
     address_type     patient_address_type NOT NULL DEFAULT 'HOME',
@@ -59,10 +80,10 @@ CREATE TABLE patient_addresses (
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX uq_patient_primary_address ON patient_addresses (patient_id) WHERE is_primary;
-CREATE INDEX ix_patient_addresses_patient ON patient_addresses (patient_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_patient_primary_address ON patient_addresses (patient_id) WHERE is_primary;
+CREATE INDEX IF NOT EXISTS ix_patient_addresses_patient ON patient_addresses (patient_id);
 
-CREATE TABLE patient_emergency_contacts (
+CREATE TABLE IF NOT EXISTS patient_emergency_contacts (
     emergency_contact_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     patient_id           UUID NOT NULL REFERENCES patients(patient_id) ON DELETE CASCADE,
     full_name            VARCHAR(200) NOT NULL,
@@ -73,9 +94,9 @@ CREATE TABLE patient_emergency_contacts (
     updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX ix_emergency_contacts_patient ON patient_emergency_contacts (patient_id);
+CREATE INDEX IF NOT EXISTS ix_emergency_contacts_patient ON patient_emergency_contacts (patient_id);
 
-CREATE TABLE patient_profile_audit (
+CREATE TABLE IF NOT EXISTS patient_profile_audit (
     audit_id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     patient_id        UUID NOT NULL REFERENCES patients(patient_id) ON DELETE RESTRICT,
     actor_user_id     UUID, -- External IAM identifier.
@@ -86,10 +107,10 @@ CREATE TABLE patient_profile_audit (
     occurred_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX ix_patient_audit_patient_time ON patient_profile_audit (patient_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS ix_patient_audit_patient_time ON patient_profile_audit (patient_id, occurred_at DESC);
 
 -- Simple service-owned count for the Admin dashboard.
-CREATE VIEW v_patient_count_by_status AS
+CREATE OR REPLACE VIEW v_patient_count_by_status AS
 SELECT profile_status, COUNT(*)::BIGINT AS patient_count
 FROM patients
 GROUP BY profile_status;
@@ -121,3 +142,31 @@ CREATE INDEX IF NOT EXISTS ix_outbox_ready
     WHERE published_at IS NULL;
 CREATE INDEX IF NOT EXISTS ix_outbox_aggregate_version
     ON outbox_events (aggregate_type, aggregate_id, aggregate_version);
+
+-- Idempotency records for mutating requests (e.g. createPatient with Idempotency-Key).
+-- Enforces unique triple (principal_key, operation_scope, idempotency_key) with 48h TTL.
+CREATE TABLE IF NOT EXISTS idempotency_records (
+    idempotency_record_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    principal_key           VARCHAR(200) NOT NULL, -- e.g. user:<uuid> or service:<client-id>
+    operation_scope         VARCHAR(180) NOT NULL, -- e.g. createPatient or POST:/api/v1/patients
+    idempotency_key         VARCHAR(120) NOT NULL,
+    request_hash            CHAR(64) NOT NULL,     -- SHA-256 hex digest of canonical request payload
+    state                   VARCHAR(16) NOT NULL DEFAULT 'IN_PROGRESS' CHECK (state IN ('IN_PROGRESS', 'COMPLETED')),
+    response_status         SMALLINT,
+    response_body_encrypted BYTEA,
+    response_key_version    VARCHAR(80),
+    resource_type           VARCHAR(80),
+    resource_id             UUID,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at              TIMESTAMPTZ NOT NULL DEFAULT (now() + INTERVAL '48 hours'),
+    completed_at            TIMESTAMPTZ,
+    CONSTRAINT uq_idempotency_principal_operation_key UNIQUE (principal_key, operation_scope, idempotency_key),
+    CONSTRAINT ck_idempotency_completion CHECK (
+        (state = 'IN_PROGRESS' AND completed_at IS NULL)
+        OR (state = 'COMPLETED' AND completed_at IS NOT NULL AND response_status IS NOT NULL)
+    ),
+    CONSTRAINT ck_idempotency_expiry CHECK (expires_at > created_at)
+);
+CREATE INDEX IF NOT EXISTS ix_idempotency_expires_at
+    ON idempotency_records (expires_at);

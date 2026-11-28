@@ -1,7 +1,7 @@
 # Issue map – SOA.MediBook
 
-> Cập nhật: 2026-11-23. Sinh từ `api-contract/matrix-api.md`, `event-matrix.md`, `realtime-contract.md`, `demo-scope.md` và schema SQL hiện có.
-> Tổng: **8 epic** + **69 sub-issue**.
+> Cập nhật: 2026-11-27. Sinh từ `api-contract/matrix-api.md`, `event-matrix.md`, `realtime-contract.md`, `demo-scope.md` và schema SQL hiện có.
+> Tổng: **8 epic** + **77 sub-issue** (web epic mở rộng từ 22 → 30 sub-issues theo ui-screens.md 26 màn hình).
 
 ## 1. Tổng quan
 
@@ -13,7 +13,7 @@
 | [#25](https://github.com/hvduong2k5/SOA.MediBook/issues/25) | Scheduling & Queue Service | Slot, appointment, check-in, hàng đợi realtime | 8 |
 | [#34](https://github.com/hvduong2k5/SOA.MediBook/issues/34) | Clinical Service | Encounter, chẩn đoán, xét nghiệm, đơn thuốc (PHI) | 7 |
 | [#42](https://github.com/hvduong2k5/SOA.MediBook/issues/42) | Reminder & Notification Service | Nhắc hẹn, inbox, preference, SSE delivery | 7 |
-| [#50](https://github.com/hvduong2k5/SOA.MediBook/issues/50) | Web – React SPA | React SPA cho 5 actor, tích hợp REST + SSE | 22 |
+| [#50](https://github.com/hvduong2k5/SOA.MediBook/issues/50) | Web – React SPA | React SPA cho 5 actor, tích hợp REST + SSE (26 màn hình §3.1–§3.26) | 30 |
 | [#73](https://github.com/hvduong2k5/SOA.MediBook/issues/73) | API Gateway | Edge routing, xác thực JWT, rate limit, SSE proxy | 6 |
 
 ## 2. Thứ tự thực hiện
@@ -127,6 +127,14 @@ Với `api-gateway`: `Setup` (chọn công nghệ) → `Routing` → `AuthN` →
 | 70 | [#70 [web][Screen] Workspace lần khám](https://github.com/hvduong2k5/SOA.MediBook/issues/70) | — |
 | 71 | [#71 [web][Screen] Chỉ định & kết quả xét nghiệm](https://github.com/hvduong2k5/SOA.MediBook/issues/71) | — |
 | 72 | [#72 [web][Optimize & Deploy] Performance, accessibility, E2E smoke, build & deploy](https://github.com/hvduong2k5/SOA.MediBook/issues/72) | — |
+| 82 | [#82 [web][Screen] Đơn thuốc và tái khám (§3.19 — SHOULD)](https://github.com/hvduong2k5/SOA.MediBook/issues/82) | — |
+| 83 | [#83 [web][Screen] Hoàn tất và công bố hồ sơ (§3.20 — MUST)](https://github.com/hvduong2k5/SOA.MediBook/issues/83) | — |
+| 84 | [#84 [web][Screen] Quản trị người dùng, role và permission (§3.21 — SHOULD/deferred)](https://github.com/hvduong2k5/SOA.MediBook/issues/84) | `deferred` |
+| 85 | [#85 [web][Screen] Quản lý cơ sở và danh mục nguồn lực (§3.22 — MUST seed)](https://github.com/hvduong2k5/SOA.MediBook/issues/85) | — |
+| 86 | [#86 [web][Screen] Quản lý ca, lịch, nghỉ và ngày lễ (§3.23 — MUST seed/SHOULD)](https://github.com/hvduong2k5/SOA.MediBook/issues/86) | — |
+| 87 | [#87 [web][Screen] Chính sách booking và queue (§3.24 — MUST seed/SHOULD)](https://github.com/hvduong2k5/SOA.MediBook/issues/87) | — |
+| 88 | [#88 [web][Screen] Cấu hình thông báo và reminder (§3.25 — SHOULD)](https://github.com/hvduong2k5/SOA.MediBook/issues/88) | — |
+| 89 | [#89 [web][Screen] Dashboard vận hành và audit (§3.26 — SHOULD/deferred)](https://github.com/hvduong2k5/SOA.MediBook/issues/89) | `deferred` |
 
 ### [#73](https://github.com/hvduong2k5/SOA.MediBook/issues/73) — [API Gateway] Edge routing, JWT/JWKS, rate limit, Problem Details & SSE
 
@@ -193,6 +201,8 @@ Chúng được giữ trong contract nhưng đánh dấu deferred, và được 
 - [#51](https://github.com/hvduong2k5/SOA.MediBook/issues/51) — F004 — không có route/mock quên mật khẩu.
 - [#53](https://github.com/hvduong2k5/SOA.MediBook/issues/53) — F004 — không có màn hình quên/đặt lại mật khẩu.
 - [#79](https://github.com/hvduong2k5/SOA.MediBook/issues/79) — F112 — không thêm route/monitoring đặc biệt cho demo.
+- [#84](https://github.com/hvduong2k5/SOA.MediBook/issues/84) — F007/F008 — web admin user/role CRUD deferred; chỉ F022 (session) SHOULD.
+- [#89](https://github.com/hvduong2k5/SOA.MediBook/issues/89) — F098–F105/F112 — web dashboard thống kê deferred; chỉ F111 audit log SHOULD.
 
 ## 6. Nhãn & quy ước
 
