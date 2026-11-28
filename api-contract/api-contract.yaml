@@ -2,42 +2,47 @@ openapi: 3.1.0
 info:
   title: Clinic Appointment & Real-time Queue Management API
   version: 1.0.0
-  description: Implementation-oriented API contract for the 6 PostgreSQL-backed Microservices. API Gateway is an independent edge component and the only public entry point. Every protected operation declares x-required-permissions or x-any-of-permissions and x-data-scope. Wire properties use camelCase; persistence columns remain snake_case. This contract is derived from the six bootstrap SQL schemas and the service function specification. Some business permissions must be seeded into IAM; see matrix-api.md.
+  description: Implementation-oriented API contract for the 6 PostgreSQL-backed Microservices. API Gateway is an independent
+    edge component and the only public entry point. Every protected operation declares x-required-permissions or x-any-of-permissions
+    and x-data-scope. Wire properties use camelCase; persistence columns remain snake_case. This contract is derived from
+    the six bootstrap SQL schemas and the service function specification. Some business permissions must be seeded into IAM;
+    see matrix-api.md.
   contact:
     name: Project API Team
 servers:
-  - url: http://localhost:8080
-    description: Local API Gateway via Docker Compose
-  - url: https://api.example.com
-    description: Environment placeholder; replace before deployment
+- url: http://localhost:8080
+  description: Local API Gateway via Docker Compose
+- url: https://api.example.com
+  description: Environment placeholder; replace before deployment
 tags:
-  - name: Identity & Access
-    description: Authentication, credentials, roles, permissions and sessions.
-  - name: Patient profiles
-    description: Administrative patient profiles and contact details.
-  - name: Hospital resources
-    description: Hospital catalogue, doctors, rooms, specialties and working schedules.
-  - name: Scheduling
-    description: Appointment slots, reservations, appointments, check-in and queues.
-  - name: Clinical records
-    description: Medical encounters, diagnoses, tests, prescriptions and published records.
-  - name: Notifications & reminders
-    description: Notifications, delivery channels, scheduled reminders and worker operations.
+- name: Identity & Access
+  description: Authentication, credentials, roles, permissions and sessions.
+- name: Patient profiles
+  description: Administrative patient profiles and contact details.
+- name: Hospital resources
+  description: Hospital catalogue, doctors, rooms, specialties and working schedules.
+- name: Scheduling
+  description: Appointment slots, reservations, appointments, check-in and queues.
+- name: Clinical records
+  description: Medical encounters, diagnoses, tests, prescriptions and published records.
+- name: Notifications & reminders
+  description: Notifications, delivery channels, scheduled reminders and worker operations.
 paths:
   /api/v1/auth/register:
     post:
       operationId: registerPatient
       summary: Đăng ký tài khoản bệnh nhân
-      description: Tạo user PATIENT; sau khi tạo identity thành công, gọi Consumer Service tạo patient profile bằng saga/outbox. Không trả password hash.
+      description: Tạo user PATIENT; sau khi tạo identity thành công, gọi Consumer Service tạo patient profile bằng saga/outbox.
+        Không trả password hash.
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions: []
       x-data-scope: PUBLIC
       x-idempotency-required: true
       x-empty-state: —
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       security: []
       requestBody:
         required: true
@@ -53,7 +58,7 @@ paths:
               schema:
                 type: object
                 required:
-                  - data
+                - data
                 properties:
                   data:
                     $ref: '#/components/schemas/TokenPair'
@@ -96,14 +101,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
       x-idempotency-key-scope: authenticated-principal-or-public-client + operationId + Idempotency-Key
-      x-idempotency-replay: Same key and same request payload returns the original result; same key with different payload returns 409 IDEMPOTENCY_KEY_REUSED.
+      x-idempotency-replay: Same key and same request payload returns the original result; same key with different payload
+        returns 409 IDEMPOTENCY_KEY_REUSED.
   /api/v1/auth/login:
     post:
       operationId: login
       summary: Đăng nhập và cấp token
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions: []
       x-data-scope: PUBLIC
@@ -125,7 +132,7 @@ paths:
               schema:
                 type: object
                 required:
-                  - data
+                - data
                 properties:
                   data:
                     $ref: '#/components/schemas/TokenPair'
@@ -177,9 +184,10 @@ paths:
     post:
       operationId: refreshSession
       summary: Làm mới access token
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions: []
       x-data-scope: PUBLIC
@@ -201,7 +209,7 @@ paths:
               schema:
                 type: object
                 required:
-                  - data
+                - data
                 properties:
                   data:
                     $ref: '#/components/schemas/TokenPair'
@@ -253,18 +261,19 @@ paths:
     post:
       operationId: logout
       summary: Đăng xuất và thu hồi refresh token
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions:
-        - account.self.update
+      - account.self.update
       x-data-scope: SELF
       x-idempotency-required: false
       x-empty-state: —
       x-permission-logic: ALL
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -279,7 +288,7 @@ paths:
               schema:
                 type: object
                 required:
-                  - data
+                - data
                 properties:
                   data:
                     $ref: '#/components/schemas/ActionResponse'
@@ -337,9 +346,10 @@ paths:
     post:
       operationId: forgotPassword
       summary: Yêu cầu khôi phục mật khẩu
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions: []
       x-data-scope: PUBLIC
@@ -361,7 +371,7 @@ paths:
               schema:
                 type: object
                 required:
-                  - data
+                - data
                 properties:
                   data:
                     $ref: '#/components/schemas/ActionResponse'
@@ -401,9 +411,10 @@ paths:
     post:
       operationId: resetPassword
       summary: Đặt lại mật khẩu bằng token
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions: []
       x-data-scope: PUBLIC
@@ -425,7 +436,7 @@ paths:
               schema:
                 type: object
                 required:
-                  - data
+                - data
                 properties:
                   data:
                     $ref: '#/components/schemas/ActionResponse'
@@ -477,19 +488,20 @@ paths:
     get:
       operationId: getCurrentAccount
       summary: Lấy tài khoản hiện tại
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions:
-        - account.self.read
+      - account.self.read
       x-data-scope: SELF
       x-idempotency-required: false
       x-empty-state: 401 nếu không có principal
       parameters: []
       x-permission-logic: ALL
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       responses:
         '200':
           description: Thành công.
@@ -498,7 +510,7 @@ paths:
               schema:
                 type: object
                 required:
-                  - data
+                - data
                 properties:
                   data:
                     $ref: '#/components/schemas/UserSafe'
@@ -556,19 +568,20 @@ paths:
     patch:
       operationId: changeOwnPassword
       summary: Đổi mật khẩu tài khoản hiện tại
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions:
-        - account.self.update
+      - account.self.update
       x-data-scope: SELF
       x-idempotency-required: false
       x-empty-state: —
       parameters: []
       x-permission-logic: ALL
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -583,7 +596,7 @@ paths:
               schema:
                 type: object
                 required:
-                  - data
+                - data
                 properties:
                   data:
                     $ref: '#/components/schemas/ActionResponse'
@@ -641,57 +654,58 @@ paths:
     get:
       operationId: listUsers
       summary: Liệt kê users
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions:
-        - account.manage
+      - account.manage
       x-data-scope: REQUIRED
       x-idempotency-required: false
       x-empty-state: 200 data.items=[]
       parameters:
-        - in: query
-          name: page
-          required: false
-          schema:
-            type: integer
-            minimum: 0
-          description: Số trang, bắt đầu từ 0
-        - in: query
-          name: size
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-          description: Số bản ghi mỗi trang, mặc định 20, tối đa 100
-        - in: query
-          name: sort
-          required: false
-          schema:
-            type: string
-          description: Trường và hướng sắp xếp cho phép
-        - in: query
-          name: status
-          required: false
-          schema:
-            type: string
-          description: PENDING, ACTIVE, LOCKED, DISABLED
-        - in: query
-          name: roleCode
-          required: false
-          schema:
-            type: string
-          description: Lọc theo role
-        - in: query
-          name: keyword
-          required: false
-          schema:
-            type: string
-          description: Tìm username/email/phone/userId
+      - in: query
+        name: page
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+        description: Số trang, bắt đầu từ 0
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+        description: Số bản ghi mỗi trang, mặc định 20, tối đa 100
+      - in: query
+        name: sort
+        required: false
+        schema:
+          type: string
+        description: Trường và hướng sắp xếp cho phép
+      - in: query
+        name: status
+        required: false
+        schema:
+          type: string
+        description: PENDING, ACTIVE, LOCKED, DISABLED
+      - in: query
+        name: roleCode
+        required: false
+        schema:
+          type: string
+        description: Lọc theo role
+      - in: query
+        name: keyword
+        required: false
+        schema:
+          type: string
+        description: Tìm username/email/phone/userId
       x-permission-logic: ALL
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       responses:
         '200':
           description: Thành công.
@@ -750,20 +764,21 @@ paths:
     post:
       operationId: createUser
       summary: Tạo user
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions:
-        - account.manage
+      - account.manage
       x-data-scope: REQUIRED
       x-idempotency-required: true
       x-empty-state: —
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-permission-logic: ALL
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -778,7 +793,7 @@ paths:
               schema:
                 type: object
                 required:
-                  - data
+                - data
                 properties:
                   data:
                     $ref: '#/components/schemas/Users'
@@ -833,31 +848,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
       x-idempotency-key-scope: authenticated-principal-or-public-client + operationId + Idempotency-Key
-      x-idempotency-replay: Same key and same request payload returns the original result; same key with different payload returns 409 IDEMPOTENCY_KEY_REUSED.
+      x-idempotency-replay: Same key and same request payload returns the original result; same key with different payload
+        returns 409 IDEMPOTENCY_KEY_REUSED.
   /api/v1/admin/users/{userId}:
     get:
       operationId: getUser
       summary: Lấy chi tiết user
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions:
-        - account.manage
+      - account.manage
       x-data-scope: REQUIRED
       x-idempotency-required: false
       x-empty-state: 404 resource not found
       parameters:
-        - in: path
-          name: userId
-          required: true
-          schema:
-            type: string
-            format: uuid
-          description: ID định danh userId.
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh userId.
       x-permission-logic: ALL
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       responses:
         '200':
           description: Thành công.
@@ -866,7 +883,7 @@ paths:
               schema:
                 type: object
                 required:
-                  - data
+                - data
                 properties:
                   data:
                     $ref: '#/components/schemas/Users'
@@ -929,26 +946,27 @@ paths:
     patch:
       operationId: updateUser
       summary: Cập nhật user
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions:
-        - account.manage
+      - account.manage
       x-data-scope: REQUIRED
       x-idempotency-required: false
       x-empty-state: 404 resource not found
       parameters:
-        - in: path
-          name: userId
-          required: true
-          schema:
-            type: string
-            format: uuid
-          description: ID định danh userId.
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh userId.
       x-permission-logic: ALL
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -963,7 +981,7 @@ paths:
               schema:
                 type: object
                 required:
-                  - data
+                - data
                 properties:
                   data:
                     $ref: '#/components/schemas/Users'
@@ -1027,26 +1045,27 @@ paths:
     patch:
       operationId: setUserStatus
       summary: Khóa, mở khóa hoặc đổi trạng thái tài khoản
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions:
-        - account.manage
+      - account.manage
       x-data-scope: GLOBAL
       x-idempotency-required: false
       x-empty-state: 404 user not found
       parameters:
-        - in: path
-          name: userId
-          required: true
-          schema:
-            type: string
-            format: uuid
-          description: ID định danh userId.
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh userId.
       x-permission-logic: ALL
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -1061,7 +1080,7 @@ paths:
               schema:
                 type: object
                 required:
-                  - data
+                - data
                 properties:
                   data:
                     $ref: '#/components/schemas/UserSafe'
@@ -1125,45 +1144,46 @@ paths:
     get:
       operationId: listRoles
       summary: Liệt kê roles
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions:
-        - role.manage
+      - role.manage
       x-data-scope: REQUIRED
       x-idempotency-required: false
       x-empty-state: 200 data.items=[]
       parameters:
-        - in: query
-          name: page
-          required: false
-          schema:
-            type: integer
-            minimum: 0
-          description: Số trang, bắt đầu từ 0
-        - in: query
-          name: size
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-          description: Số bản ghi mỗi trang, mặc định 20, tối đa 100
-        - in: query
-          name: sort
-          required: false
-          schema:
-            type: string
-          description: Trường và hướng sắp xếp cho phép
-        - in: query
-          name: isSystem
-          required: false
-          schema:
-            type: boolean
-          description: Lọc role hệ thống
+      - in: query
+        name: page
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+        description: Số trang, bắt đầu từ 0
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+        description: Số bản ghi mỗi trang, mặc định 20, tối đa 100
+      - in: query
+        name: sort
+        required: false
+        schema:
+          type: string
+        description: Trường và hướng sắp xếp cho phép
+      - in: query
+        name: isSystem
+        required: false
+        schema:
+          type: boolean
+        description: Lọc role hệ thống
       x-permission-logic: ALL
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       responses:
         '200':
           description: Thành công.
@@ -1222,20 +1242,21 @@ paths:
     post:
       operationId: createRole
       summary: Tạo role
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions:
-        - role.manage
+      - role.manage
       x-data-scope: REQUIRED
       x-idempotency-required: true
       x-empty-state: —
       parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IdempotencyKey'
       x-permission-logic: ALL
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -1250,7 +1271,7 @@ paths:
               schema:
                 type: object
                 required:
-                  - data
+                - data
                 properties:
                   data:
                     $ref: '#/components/schemas/Roles'
@@ -1305,31 +1326,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
       x-idempotency-key-scope: authenticated-principal-or-public-client + operationId + Idempotency-Key
-      x-idempotency-replay: Same key and same request payload returns the original result; same key with different payload returns 409 IDEMPOTENCY_KEY_REUSED.
+      x-idempotency-replay: Same key and same request payload returns the original result; same key with different payload
+        returns 409 IDEMPOTENCY_KEY_REUSED.
   /api/v1/admin/roles/{roleId}:
     get:
       operationId: getRole
       summary: Lấy chi tiết role
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions:
-        - role.manage
+      - role.manage
       x-data-scope: REQUIRED
       x-idempotency-required: false
       x-empty-state: 404 resource not found
       parameters:
-        - in: path
-          name: roleId
-          required: true
-          schema:
-            type: string
-            format: uuid
-          description: ID định danh roleId.
+      - in: path
+        name: roleId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh roleId.
       x-permission-logic: ALL
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       responses:
         '200':
           description: Thành công.
@@ -1338,7 +1361,7 @@ paths:
               schema:
                 type: object
                 required:
-                  - data
+                - data
                 properties:
                   data:
                     $ref: '#/components/schemas/Roles'
@@ -1401,26 +1424,27 @@ paths:
     patch:
       operationId: updateRole
       summary: Cập nhật role
-      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      description: 'Owner: Identity & Access Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng
+        data scope.'
       tags:
-        - Identity & Access
+      - Identity & Access
       x-owner-service: Identity & Access Service
       x-required-permissions:
-        - role.manage
+      - role.manage
       x-data-scope: REQUIRED
       x-idempotency-required: false
       x-empty-state: 404 resource not found
       parameters:
-        - in: path
-          name: roleId
-          required: true
-          schema:
-            type: string
-            format: uuid
-          description: ID định danh roleId.
+      - in: path
+        name: roleId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh roleId.
       x-permission-logic: ALL
       security:
-        - bearerAuth: []
+      - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -1435,7 +1459,7 @@ paths:
               schema:
                 type: object
                 required:
-                  - data
+                - data
                 properties:
                   data:
                     $ref: '#/components/schemas/Roles'
@@ -1495,3 +1519,2668 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/patients:
+    get:
+      operationId: listPatients
+      summary: Liệt kê patients
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions: []
+      x-data-scope: REQUIRED
+      x-idempotency-required: false
+      x-empty-state: 200 data.items=[]
+      parameters:
+      - in: query
+        name: page
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+        description: Số trang, bắt đầu từ 0
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+        description: Số bản ghi mỗi trang, mặc định 20, tối đa 100
+      - in: query
+        name: sort
+        required: false
+        schema:
+          type: string
+        description: Trường và hướng sắp xếp cho phép
+      - in: query
+        name: keyword
+        required: false
+        schema:
+          type: string
+        description: Tìm theo patientCode, họ tên hoặc contact
+      - in: query
+        name: profileStatus
+        required: false
+        schema:
+          type: string
+        description: ACTIVE, INACTIVE, PENDING_VERIFICATION
+      - in: query
+        name: userId
+        required: false
+        schema:
+          type: string
+          format: uuid
+        description: Lọc tài khoản IAM
+      x-any-of-permissions:
+      - patient.read.assigned
+      - patient.read.all
+      x-permission-logic: ANY
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagePatients'
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      operationId: createPatient
+      summary: Tạo patient
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions:
+      - patient.create
+      x-data-scope: REQUIRED
+      x-idempotency-required: true
+      x-empty-state: —
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      x-permission-logic: ALL
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePatientsRequest'
+      responses:
+        '201':
+          description: Tạo resource thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Patients'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/patients/{patientId}:
+    get:
+      operationId: getPatient
+      summary: Lấy chi tiết patient
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions: []
+      x-data-scope: REQUIRED
+      x-idempotency-required: false
+      x-empty-state: 404 resource not found
+      parameters:
+      - in: path
+        name: patientId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh patientId.
+      x-any-of-permissions:
+      - patient.read.self
+      - patient.read.assigned
+      - patient.read.all
+      x-permission-logic: ANY
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Patients'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    patch:
+      operationId: updatePatient
+      summary: Cập nhật patient
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions: []
+      x-data-scope: REQUIRED
+      x-idempotency-required: false
+      x-empty-state: 404 resource not found
+      parameters:
+      - in: path
+        name: patientId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh patientId.
+      x-any-of-permissions:
+      - patient.update.self
+      - patient.update.all
+      x-permission-logic: ANY
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchPatientsRequest'
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Patients'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/patients/me:
+    get:
+      operationId: getMyPatientProfile
+      summary: Lấy hồ sơ bệnh nhân liên kết tài khoản hiện tại
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions:
+      - patient.read.self
+      x-data-scope: SELF
+      x-idempotency-required: false
+      x-empty-state: 404 chưa có hồ sơ Patient liên kết
+      parameters: []
+      x-permission-logic: ALL
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Patients'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Chưa có hồ sơ Patient liên kết với tài khoản hiện tại.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/patients/{patientId}/contacts:
+    get:
+      operationId: listPatientContacts
+      summary: Liệt kê liên hệ bệnh nhân
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions: []
+      x-data-scope: SELF_OR_ASSIGNED
+      x-idempotency-required: false
+      x-empty-state: 200 data.items=[]
+      parameters:
+      - in: path
+        name: patientId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh patientId.
+      - in: query
+        name: page
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+        description: Số trang, bắt đầu từ 0
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+        description: Số bản ghi mỗi trang, mặc định 20, tối đa 100
+      - in: query
+        name: sort
+        required: false
+        schema:
+          type: string
+        description: Trường và hướng sắp xếp cho phép
+      - in: query
+        name: contactType
+        required: false
+        schema:
+          type: string
+        description: PHONE hoặc EMAIL
+      x-any-of-permissions:
+      - patient.contact.manage.self
+      - patient.contact.manage.all
+      x-permission-logic: ANY
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagePatientContacts'
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      operationId: createPatientContact
+      summary: Thêm liên hệ bệnh nhân
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions: []
+      x-data-scope: SELF_OR_ASSIGNED
+      x-idempotency-required: false
+      x-empty-state: —
+      parameters:
+      - in: path
+        name: patientId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh patientId.
+      x-any-of-permissions:
+      - patient.contact.manage.self
+      - patient.contact.manage.all
+      x-permission-logic: ANY
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePatientContactsRequest'
+      responses:
+        '201':
+          description: Tạo resource thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PatientContacts'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/patients/{patientId}/contacts/{contactId}:
+    patch:
+      operationId: updatePatientContact
+      summary: Cập nhật liên hệ bệnh nhân
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions: []
+      x-data-scope: SELF_OR_ASSIGNED
+      x-idempotency-required: false
+      x-empty-state: 404 patient/contact not found
+      parameters:
+      - in: path
+        name: patientId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh patientId.
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh contactId.
+      x-any-of-permissions:
+      - patient.contact.manage.self
+      - patient.contact.manage.all
+      x-permission-logic: ANY
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchPatientContactsRequest'
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PatientContacts'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    delete:
+      operationId: deletePatientContact
+      summary: Xóa liên hệ bệnh nhân
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions: []
+      x-data-scope: SELF_OR_ASSIGNED
+      x-idempotency-required: false
+      x-empty-state: 404 patient/contact not found
+      parameters:
+      - in: path
+        name: patientId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh patientId.
+      - in: path
+        name: contactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh contactId.
+      x-any-of-permissions:
+      - patient.contact.manage.self
+      - patient.contact.manage.all
+      x-permission-logic: ANY
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: Thao tác thành công; không có response body.
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/patients/{patientId}/addresses:
+    get:
+      operationId: listPatientAddresses
+      summary: Liệt kê địa chỉ bệnh nhân
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions: []
+      x-data-scope: SELF_OR_ASSIGNED
+      x-idempotency-required: false
+      x-empty-state: 200 data.items=[]
+      parameters:
+      - in: path
+        name: patientId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh patientId.
+      - in: query
+        name: page
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+        description: Số trang, bắt đầu từ 0
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+        description: Số bản ghi mỗi trang, mặc định 20, tối đa 100
+      - in: query
+        name: sort
+        required: false
+        schema:
+          type: string
+        description: Trường và hướng sắp xếp cho phép
+      x-any-of-permissions:
+      - patient.address.manage.self
+      - patient.address.manage.all
+      x-permission-logic: ANY
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagePatientAddresses'
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      operationId: createPatientAddress
+      summary: Thêm địa chỉ bệnh nhân
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions: []
+      x-data-scope: SELF_OR_ASSIGNED
+      x-idempotency-required: false
+      x-empty-state: —
+      parameters:
+      - in: path
+        name: patientId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh patientId.
+      x-any-of-permissions:
+      - patient.address.manage.self
+      - patient.address.manage.all
+      x-permission-logic: ANY
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePatientAddressesRequest'
+      responses:
+        '201':
+          description: Tạo resource thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PatientAddresses'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/patients/{patientId}/addresses/{addressId}:
+    patch:
+      operationId: updatePatientAddress
+      summary: Cập nhật địa chỉ bệnh nhân
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions: []
+      x-data-scope: SELF_OR_ASSIGNED
+      x-idempotency-required: false
+      x-empty-state: 404 patient/address not found
+      parameters:
+      - in: path
+        name: patientId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh patientId.
+      - in: path
+        name: addressId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh addressId.
+      x-any-of-permissions:
+      - patient.address.manage.self
+      - patient.address.manage.all
+      x-permission-logic: ANY
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchPatientAddressesRequest'
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PatientAddresses'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    delete:
+      operationId: deletePatientAddress
+      summary: Xóa địa chỉ bệnh nhân
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions: []
+      x-data-scope: SELF_OR_ASSIGNED
+      x-idempotency-required: false
+      x-empty-state: 404 patient/address not found
+      parameters:
+      - in: path
+        name: patientId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh patientId.
+      - in: path
+        name: addressId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh addressId.
+      x-any-of-permissions:
+      - patient.address.manage.self
+      - patient.address.manage.all
+      x-permission-logic: ANY
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: Thao tác thành công; không có response body.
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/patients/{patientId}/emergency-contacts:
+    get:
+      operationId: listEmergencyContacts
+      summary: Liệt kê liên hệ khẩn cấp
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions: []
+      x-data-scope: SELF_OR_ASSIGNED
+      x-idempotency-required: false
+      x-empty-state: 200 data.items=[]
+      parameters:
+      - in: path
+        name: patientId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh patientId.
+      - in: query
+        name: page
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+        description: Số trang, bắt đầu từ 0
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+        description: Số bản ghi mỗi trang, mặc định 20, tối đa 100
+      - in: query
+        name: sort
+        required: false
+        schema:
+          type: string
+        description: Trường và hướng sắp xếp cho phép
+      x-any-of-permissions:
+      - patient.emergency.manage.self
+      - patient.emergency.manage.all
+      x-permission-logic: ANY
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagePatientEmergencyContacts'
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      operationId: createEmergencyContact
+      summary: Thêm liên hệ khẩn cấp
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions: []
+      x-data-scope: SELF_OR_ASSIGNED
+      x-idempotency-required: false
+      x-empty-state: —
+      parameters:
+      - in: path
+        name: patientId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh patientId.
+      x-any-of-permissions:
+      - patient.emergency.manage.self
+      - patient.emergency.manage.all
+      x-permission-logic: ANY
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePatientEmergencyContactsRequest'
+      responses:
+        '201':
+          description: Tạo resource thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PatientEmergencyContacts'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/patients/{patientId}/emergency-contacts/{emergencyContactId}:
+    patch:
+      operationId: updateEmergencyContact
+      summary: Cập nhật liên hệ khẩn cấp
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions: []
+      x-data-scope: SELF_OR_ASSIGNED
+      x-idempotency-required: false
+      x-empty-state: 404 patient/contact not found
+      parameters:
+      - in: path
+        name: patientId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh patientId.
+      - in: path
+        name: emergencyContactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh emergencyContactId.
+      x-any-of-permissions:
+      - patient.emergency.manage.self
+      - patient.emergency.manage.all
+      x-permission-logic: ANY
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchPatientEmergencyContactsRequest'
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PatientEmergencyContacts'
+                  requestId:
+                    type: string
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    delete:
+      operationId: deleteEmergencyContact
+      summary: Xóa liên hệ khẩn cấp
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions: []
+      x-data-scope: SELF_OR_ASSIGNED
+      x-idempotency-required: false
+      x-empty-state: 404 patient/contact not found
+      parameters:
+      - in: path
+        name: patientId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh patientId.
+      - in: path
+        name: emergencyContactId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh emergencyContactId.
+      x-any-of-permissions:
+      - patient.emergency.manage.self
+      - patient.emergency.manage.all
+      x-permission-logic: ANY
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: Thao tác thành công; không có response body.
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/patients/{patientId}/audit-logs:
+    get:
+      operationId: listPatientProfileAudit
+      summary: Xem lịch sử thay đổi hồ sơ hành chính
+      description: 'Owner: Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions:
+      - patient.audit.read
+      x-data-scope: ASSIGNED_OR_GLOBAL
+      x-idempotency-required: false
+      x-empty-state: 200 data.items=[]
+      parameters:
+      - in: path
+        name: patientId
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: ID định danh patientId.
+      - in: query
+        name: page
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+        description: Số trang, bắt đầu từ 0
+      - in: query
+        name: size
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+        description: Số bản ghi mỗi trang, mặc định 20, tối đa 100
+      - in: query
+        name: sort
+        required: false
+        schema:
+          type: string
+        description: Trường và hướng sắp xếp cho phép
+      x-permission-logic: ALL
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagePatientProfileAudits'
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Không tìm thấy resource hoặc resource không được phép tiết lộ.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/statistics/patients:
+    get:
+      operationId: getPatientCountStatistics
+      summary: Thống kê số lượng bệnh nhân theo trạng thái
+      description: 'deferred (F098 OUT) — giữ trong contract để tham chiếu, không implement hoặc mock trong bản demo. Owner:
+        Consumer Service. Permission được kiểm tra ở service nguồn; mọi truy vấn phải áp dụng data scope.'
+      deprecated: true
+      tags:
+      - Patient profiles
+      x-owner-service: Consumer Service
+      x-required-permissions:
+      - patient.statistics.read
+      x-data-scope: GLOBAL
+      x-idempotency-required: false
+      x-empty-state: 200 data.items=[]
+      parameters:
+      - in: query
+        name: from
+        required: false
+        schema:
+          type: string
+          format: date
+        description: Lọc từ ngày tạo
+      - in: query
+        name: to
+        required: false
+        schema:
+          type: string
+          format: date
+        description: Lọc đến ngày tạo
+      x-permission-logic: ALL
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Thành công.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientCountStats'
+        '400':
+          description: Yêu cầu sai cú pháp, query hoặc path parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Dữ liệu hợp lệ về cú pháp nhưng vi phạm validation/business rule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Thiếu hoặc token không hợp lệ/hết hạn.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Đã xác thực nhưng thiếu permission hoặc không nằm trong data scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Trùng dữ liệu, idempotency conflict hoặc trạng thái nghiệp vụ không cho phép.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Vượt rate limit; có thể kèm Retry-After.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Lỗi không dự kiến trong service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Service hoặc dependency tạm thời không khả dụng.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token do Identity & Access Service phát hành.
+    serviceAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Service-to-service token; chỉ được cấp cho internal route.
+  parameters:
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+      description: Khóa idempotency bắt buộc cho các request POST tạo giao dịch/hồ sơ để chống trùng lặp khi retry.
+      example: 550e8400-e29b-41d4-a716-446655440000
+  schemas:
+    ErrorEnvelope:
+      type: object
+      description: RFC 9457 Problem Details envelope cho mọi lỗi 400/401/403/404/409/422/429/5xx, luôn kèm `code` và `traceId`.
+      required:
+      - type
+      - title
+      - status
+      - detail
+      - code
+      - traceId
+      properties:
+        type:
+          type: string
+          format: uri
+          description: URI định danh loại lỗi theo RFC 9457.
+        title:
+          type: string
+          description: Tóm tắt ngắn gọn loại lỗi.
+        status:
+          type: integer
+          description: HTTP status code.
+        detail:
+          type: string
+          description: Mô tả chi tiết lỗi cho lần gọi cụ thể này.
+        instance:
+          type: string
+          description: URI tham chiếu đến request/resource phát sinh lỗi.
+        code:
+          type: string
+          description: Mã lỗi nghiệp vụ ổn định của hệ thống.
+        traceId:
+          type: string
+          description: Trace ID dùng để đối soát log/distributed tracing.
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              reason:
+                type: string
+        timestamp:
+          type: string
+          format: date-time
+      example:
+        type: https://medibook.example.com/problems/validation-error
+        title: Unprocessable Entity
+        status: 422
+        detail: Dữ liệu đầu vào vi phạm quy tắc nghiệp vụ.
+        instance: /api/v1/patients
+        code: PATIENT_VALIDATION_ERROR
+        traceId: 4bf92f3577b34da6a3ce929d0e0e4736
+        errors:
+        - field: dateOfBirth
+          reason: Ngày sinh không được lớn hơn ngày hiện tại
+        timestamp: '2026-11-27T08:30:00Z'
+    CreatePatientAddressesRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        patientId:
+          type: string
+          format: uuid
+          description: Trường tương ứng cột `patient_id`.
+        addressType:
+          type: string
+          enum:
+          - HOME
+          - MAILING
+          - OTHER
+          description: Trường tương ứng cột `address_type`.
+        addressLine:
+          type: string
+          maxLength: 255
+          description: Trường tương ứng cột `address_line`.
+        ward:
+          type: string
+          maxLength: 120
+          description: Trường tương ứng cột `ward`.
+        district:
+          type: string
+          maxLength: 120
+          description: Trường tương ứng cột `district`.
+        province:
+          type: string
+          maxLength: 120
+          description: Trường tương ứng cột `province`.
+        country:
+          type: string
+          maxLength: 100
+          description: Trường tương ứng cột `country`.
+        isPrimary:
+          type: boolean
+          description: Trường tương ứng cột `is_primary`.
+      required:
+      - patientId
+      - addressLine
+    CreatePatientContactsRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        patientId:
+          type: string
+          format: uuid
+          description: Trường tương ứng cột `patient_id`.
+        contactType:
+          type: string
+          enum:
+          - PHONE
+          - EMAIL
+          description: Trường tương ứng cột `contact_type`.
+        contactValue:
+          type: string
+          maxLength: 255
+          description: Trường tương ứng cột `contact_value`.
+        isPrimary:
+          type: boolean
+          description: Trường tương ứng cột `is_primary`.
+        isVerified:
+          type: boolean
+          description: Trường tương ứng cột `is_verified`.
+      required:
+      - patientId
+      - contactType
+      - contactValue
+    CreatePatientEmergencyContactsRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        patientId:
+          type: string
+          format: uuid
+          description: Trường tương ứng cột `patient_id`.
+        fullName:
+          type: string
+          maxLength: 200
+          description: Trường tương ứng cột `full_name`.
+        relationship:
+          type: string
+          maxLength: 80
+          description: Trường tương ứng cột `relationship`.
+        phone:
+          type: string
+          maxLength: 30
+          description: Trường tương ứng cột `phone`.
+        note:
+          type: string
+          description: Trường tương ứng cột `note`.
+      required:
+      - patientId
+      - fullName
+      - phone
+    CreatePatientsRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        patientCode:
+          type: string
+          maxLength: 40
+          description: Trường tương ứng cột `patient_code`.
+        userId:
+          type: string
+          format: uuid
+          description: External reference to Identity & Access Service; nullable for walk-in patients.
+        firstName:
+          type: string
+          maxLength: 100
+          description: Trường tương ứng cột `first_name`.
+        middleName:
+          type: string
+          maxLength: 100
+          description: Trường tương ứng cột `middle_name`.
+        lastName:
+          type: string
+          maxLength: 100
+          description: Trường tương ứng cột `last_name`.
+        dateOfBirth:
+          type: string
+          format: date
+          description: Trường tương ứng cột `date_of_birth`.
+        gender:
+          type: string
+          enum:
+          - MALE
+          - FEMALE
+          - OTHER
+          - UNKNOWN
+          description: Trường tương ứng cột `gender`.
+        profileStatus:
+          type: string
+          enum:
+          - ACTIVE
+          - INACTIVE
+          - PENDING_VERIFICATION
+          description: Trường tương ứng cột `profile_status`.
+        note:
+          type: string
+          description: Trường tương ứng cột `note`.
+      required:
+      - patientCode
+      - firstName
+      - lastName
+    EmergencyContact:
+      $ref: '#/components/schemas/PatientEmergencyContacts'
+    PageMeta:
+      type: object
+      required:
+      - page
+      - size
+      - totalElements
+      - totalPages
+      properties:
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+          minimum: 1
+        totalElements:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+    PagePatientAddresses:
+      type: object
+      required:
+      - data
+      - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatientAddresses'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+    PagePatientContacts:
+      type: object
+      required:
+      - data
+      - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatientContacts'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+    PagePatientEmergencyContacts:
+      type: object
+      required:
+      - data
+      - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatientEmergencyContacts'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+    PagePatientProfileAudits:
+      type: object
+      required:
+      - data
+      - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatientProfileAudit'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+    PagePatients:
+      type: object
+      required:
+      - data
+      - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Patients'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      example:
+        data:
+        - patientId: 11111111-2222-3333-4444-555555555555
+          patientCode: BN-2026-0001
+          firstName: An
+          middleName: Văn
+          lastName: Nguyễn
+          dateOfBirth: '1995-05-20'
+          gender: MALE
+          profileStatus: ACTIVE
+        meta:
+          page: 0
+          size: 20
+          totalElements: 1
+          totalPages: 1
+    PagedPatients:
+      $ref: '#/components/schemas/PagePatients'
+    PatchPatientAddressesRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        patientId:
+          type: string
+          format: uuid
+          description: Trường tương ứng cột `patient_id`.
+        addressType:
+          type: string
+          enum:
+          - HOME
+          - MAILING
+          - OTHER
+          description: Trường tương ứng cột `address_type`.
+        addressLine:
+          type: string
+          maxLength: 255
+          description: Trường tương ứng cột `address_line`.
+        ward:
+          type: string
+          maxLength: 120
+          description: Trường tương ứng cột `ward`.
+        district:
+          type: string
+          maxLength: 120
+          description: Trường tương ứng cột `district`.
+        province:
+          type: string
+          maxLength: 120
+          description: Trường tương ứng cột `province`.
+        country:
+          type: string
+          maxLength: 100
+          description: Trường tương ứng cột `country`.
+        isPrimary:
+          type: boolean
+          description: Trường tương ứng cột `is_primary`.
+    PatchPatientContactsRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        patientId:
+          type: string
+          format: uuid
+          description: Trường tương ứng cột `patient_id`.
+        contactType:
+          type: string
+          enum:
+          - PHONE
+          - EMAIL
+          description: Trường tương ứng cột `contact_type`.
+        contactValue:
+          type: string
+          maxLength: 255
+          description: Trường tương ứng cột `contact_value`.
+        isPrimary:
+          type: boolean
+          description: Trường tương ứng cột `is_primary`.
+        isVerified:
+          type: boolean
+          description: Trường tương ứng cột `is_verified`.
+    PatchPatientEmergencyContactsRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        patientId:
+          type: string
+          format: uuid
+          description: Trường tương ứng cột `patient_id`.
+        fullName:
+          type: string
+          maxLength: 200
+          description: Trường tương ứng cột `full_name`.
+        relationship:
+          type: string
+          maxLength: 80
+          description: Trường tương ứng cột `relationship`.
+        phone:
+          type: string
+          maxLength: 30
+          description: Trường tương ứng cột `phone`.
+        note:
+          type: string
+          description: Trường tương ứng cột `note`.
+    PatchPatientsRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        patientCode:
+          type: string
+          maxLength: 40
+          description: Trường tương ứng cột `patient_code`.
+        userId:
+          type: string
+          format: uuid
+          description: External reference to Identity & Access Service; nullable for walk-in patients.
+        firstName:
+          type: string
+          maxLength: 100
+          description: Trường tương ứng cột `first_name`.
+        middleName:
+          type: string
+          maxLength: 100
+          description: Trường tương ứng cột `middle_name`.
+        lastName:
+          type: string
+          maxLength: 100
+          description: Trường tương ứng cột `last_name`.
+        dateOfBirth:
+          type: string
+          format: date
+          description: Trường tương ứng cột `date_of_birth`.
+        gender:
+          type: string
+          enum:
+          - MALE
+          - FEMALE
+          - OTHER
+          - UNKNOWN
+          description: Trường tương ứng cột `gender`.
+        profileStatus:
+          type: string
+          enum:
+          - ACTIVE
+          - INACTIVE
+          - PENDING_VERIFICATION
+          description: Trường tương ứng cột `profile_status`.
+        note:
+          type: string
+          description: Trường tương ứng cột `note`.
+    Patient:
+      $ref: '#/components/schemas/Patients'
+    PatientAddress:
+      $ref: '#/components/schemas/PatientAddresses'
+    PatientAddresses:
+      type: object
+      additionalProperties: false
+      properties:
+        addressId:
+          type: string
+          format: uuid
+          description: Ánh xạ từ cột PostgreSQL `address_id`.
+        patientId:
+          type: string
+          format: uuid
+          description: Ánh xạ từ cột PostgreSQL `patient_id`. FK nội bộ tới `patients.patient_id`.
+        addressType:
+          type: string
+          enum:
+          - HOME
+          - MAILING
+          - OTHER
+          description: Ánh xạ từ cột PostgreSQL `address_type`.
+        addressLine:
+          type: string
+          maxLength: 255
+          description: Ánh xạ từ cột PostgreSQL `address_line`.
+        ward:
+          type: string
+          maxLength: 120
+          description: Ánh xạ từ cột PostgreSQL `ward`.
+        district:
+          type: string
+          maxLength: 120
+          description: Ánh xạ từ cột PostgreSQL `district`.
+        province:
+          type: string
+          maxLength: 120
+          description: Ánh xạ từ cột PostgreSQL `province`.
+        country:
+          type: string
+          maxLength: 100
+          description: Ánh xạ từ cột PostgreSQL `country`.
+        isPrimary:
+          type: boolean
+          description: Ánh xạ từ cột PostgreSQL `is_primary`.
+        createdAt:
+          type: string
+          format: date-time
+          description: Ánh xạ từ cột PostgreSQL `created_at`.
+        updatedAt:
+          type: string
+          format: date-time
+          description: Ánh xạ từ cột PostgreSQL `updated_at`.
+      required:
+      - patientId
+      - addressType
+      - addressLine
+      - country
+      - isPrimary
+      x-db-table: patient_addresses
+      example:
+        addressId: 33333333-4444-5555-6666-777777777777
+        patientId: 11111111-2222-3333-4444-555555555555
+        addressType: HOME
+        addressLine: 123 Nguyễn Trãi
+        ward: Phường Bến Thành
+        district: Quận 1
+        province: TP. Hồ Chí Minh
+        country: Vietnam
+        isPrimary: true
+        createdAt: '2026-11-27T08:00:00Z'
+        updatedAt: '2026-11-27T08:00:00Z'
+    PatientContact:
+      $ref: '#/components/schemas/PatientContacts'
+    PatientContacts:
+      type: object
+      additionalProperties: false
+      properties:
+        contactId:
+          type: string
+          format: uuid
+          description: Ánh xạ từ cột PostgreSQL `contact_id`.
+        patientId:
+          type: string
+          format: uuid
+          description: Ánh xạ từ cột PostgreSQL `patient_id`. FK nội bộ tới `patients.patient_id`.
+        contactType:
+          type: string
+          enum:
+          - PHONE
+          - EMAIL
+          description: Ánh xạ từ cột PostgreSQL `contact_type`.
+        contactValue:
+          type: string
+          maxLength: 255
+          description: Ánh xạ từ cột PostgreSQL `contact_value`.
+        isPrimary:
+          type: boolean
+          description: Ánh xạ từ cột PostgreSQL `is_primary`.
+        isVerified:
+          type: boolean
+          description: Ánh xạ từ cột PostgreSQL `is_verified`.
+        createdAt:
+          type: string
+          format: date-time
+          description: Ánh xạ từ cột PostgreSQL `created_at`.
+        updatedAt:
+          type: string
+          format: date-time
+          description: Ánh xạ từ cột PostgreSQL `updated_at`.
+      required:
+      - patientId
+      - contactType
+      - contactValue
+      - isPrimary
+      - isVerified
+      x-db-table: patient_contacts
+      example:
+        contactId: 22222222-3333-4444-5555-666666666666
+        patientId: 11111111-2222-3333-4444-555555555555
+        contactType: PHONE
+        contactValue: '0901234567'
+        isPrimary: true
+        isVerified: true
+        createdAt: '2026-11-27T08:00:00Z'
+        updatedAt: '2026-11-27T08:00:00Z'
+    PatientCountStats:
+      type: array
+      items:
+        $ref: '#/components/schemas/ReadModelCount'
+    PatientEmergencyContacts:
+      type: object
+      additionalProperties: false
+      properties:
+        emergencyContactId:
+          type: string
+          format: uuid
+          description: Ánh xạ từ cột PostgreSQL `emergency_contact_id`.
+        patientId:
+          type: string
+          format: uuid
+          description: Ánh xạ từ cột PostgreSQL `patient_id`. FK nội bộ tới `patients.patient_id`.
+        fullName:
+          type: string
+          maxLength: 200
+          description: Ánh xạ từ cột PostgreSQL `full_name`.
+        relationship:
+          type: string
+          maxLength: 80
+          description: Ánh xạ từ cột PostgreSQL `relationship`.
+        phone:
+          type: string
+          maxLength: 30
+          description: Ánh xạ từ cột PostgreSQL `phone`.
+        note:
+          type: string
+          description: Ánh xạ từ cột PostgreSQL `note`.
+        createdAt:
+          type: string
+          format: date-time
+          description: Ánh xạ từ cột PostgreSQL `created_at`.
+        updatedAt:
+          type: string
+          format: date-time
+          description: Ánh xạ từ cột PostgreSQL `updated_at`.
+      required:
+      - patientId
+      - fullName
+      - phone
+      x-db-table: patient_emergency_contacts
+      example:
+        emergencyContactId: 44444444-5555-6666-7777-888888888888
+        patientId: 11111111-2222-3333-4444-555555555555
+        fullName: Trần Thị Bình
+        relationship: SPOUSE
+        phone: '0912345678'
+        note: Liên hệ ưu tiên khi cấp cứu
+        createdAt: '2026-11-27T08:00:00Z'
+        updatedAt: '2026-11-27T08:00:00Z'
+    PatientProfileAudit:
+      type: object
+      additionalProperties: false
+      properties:
+        auditId:
+          type: integer
+          description: Ánh xạ từ cột PostgreSQL `audit_id`.
+        patientId:
+          type: string
+          format: uuid
+          description: Ánh xạ từ cột PostgreSQL `patient_id`. FK nội bộ tới `patients.patient_id`.
+        actorUserId:
+          type: string
+          format: uuid
+          description: External IAM identifier.
+        actionCode:
+          type: string
+          maxLength: 80
+          description: Ánh xạ từ cột PostgreSQL `action_code`.
+        beforeData:
+          type: object
+          additionalProperties: true
+          description: Ánh xạ từ cột PostgreSQL `before_data`.
+        afterData:
+          type: object
+          additionalProperties: true
+          description: Ánh xạ từ cột PostgreSQL `after_data`.
+        reason:
+          type: string
+          description: Ánh xạ từ cột PostgreSQL `reason`.
+        occurredAt:
+          type: string
+          format: date-time
+          description: Ánh xạ từ cột PostgreSQL `occurred_at`.
+      required:
+      - patientId
+      - actionCode
+      x-db-table: patient_profile_audit
+      example:
+        auditId: 1001
+        patientId: 11111111-2222-3333-4444-555555555555
+        actorUserId: 99999999-8888-7777-6666-555555555555
+        actionCode: PATIENT_PROFILE_UPDATED
+        beforeData:
+          note: null
+        afterData:
+          note: Khám định kỳ
+        reason: Bệnh nhân cập nhật ghi chú
+        occurredAt: '2026-11-27T08:15:00Z'
+    Patients:
+      type: object
+      additionalProperties: false
+      properties:
+        patientId:
+          type: string
+          format: uuid
+          description: Ánh xạ từ cột PostgreSQL `patient_id`.
+        patientCode:
+          type: string
+          maxLength: 40
+          description: Ánh xạ từ cột PostgreSQL `patient_code`.
+        userId:
+          type: string
+          format: uuid
+          description: External reference to Identity & Access Service; nullable for walk-in patients.
+        firstName:
+          type: string
+          maxLength: 100
+          description: Ánh xạ từ cột PostgreSQL `first_name`.
+        middleName:
+          type: string
+          maxLength: 100
+          description: Ánh xạ từ cột PostgreSQL `middle_name`.
+        lastName:
+          type: string
+          maxLength: 100
+          description: Ánh xạ từ cột PostgreSQL `last_name`.
+        dateOfBirth:
+          type: string
+          format: date
+          description: Ánh xạ từ cột PostgreSQL `date_of_birth`.
+        gender:
+          type: string
+          enum:
+          - MALE
+          - FEMALE
+          - OTHER
+          - UNKNOWN
+          description: Ánh xạ từ cột PostgreSQL `gender`.
+        profileStatus:
+          type: string
+          enum:
+          - ACTIVE
+          - INACTIVE
+          - PENDING_VERIFICATION
+          description: Ánh xạ từ cột PostgreSQL `profile_status`.
+        note:
+          type: string
+          description: Ánh xạ từ cột PostgreSQL `note`.
+        createdByUserId:
+          type: string
+          format: uuid
+          description: External IAM identifier.
+        updatedByUserId:
+          type: string
+          format: uuid
+          description: External IAM identifier.
+        createdAt:
+          type: string
+          format: date-time
+          description: Ánh xạ từ cột PostgreSQL `created_at`.
+        updatedAt:
+          type: string
+          format: date-time
+          description: Ánh xạ từ cột PostgreSQL `updated_at`.
+      required:
+      - patientCode
+      - firstName
+      - lastName
+      - gender
+      - profileStatus
+      x-db-table: patients
+      example:
+        patientId: 11111111-2222-3333-4444-555555555555
+        patientCode: BN-2026-0001
+        userId: 99999999-8888-7777-6666-555555555555
+        firstName: An
+        middleName: Văn
+        lastName: Nguyễn
+        dateOfBirth: '1995-05-20'
+        gender: MALE
+        profileStatus: ACTIVE
+        note: Khám định kỳ
+        createdAt: '2026-11-27T08:00:00Z'
+        updatedAt: '2026-11-27T08:00:00Z'
+    ReadModelCount:
+      type: object
+      properties:
+        profileStatus:
+          type: string
+        patientCount:
+          type: integer
