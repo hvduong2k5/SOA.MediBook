@@ -1,44 +1,76 @@
 -- Clinical Service
--- Database: clinical_db
+-- Database: clinical_db (17 tables)
 -- Owns medical encounters, clinical notes, diagnoses, basic lab orders/results and prescriptions.
 -- patient_id, doctor_id, queue_ticket_id and user_id are external UUID references; no cross-service FKs.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TYPE encounter_status AS ENUM ('DRAFT', 'IN_PROGRESS', 'PENDING_RESULTS', 'READY_FOR_REVIEW', 'COMPLETED', 'PUBLISHED');
-CREATE TYPE diagnosis_type AS ENUM ('PRIMARY', 'SECONDARY');
-CREATE TYPE test_order_status AS ENUM ('REQUESTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');
-CREATE TYPE test_result_status AS ENUM ('PENDING', 'PRELIMINARY', 'FINAL', 'AMENDED');
-CREATE TYPE prescription_status AS ENUM ('DRAFT', 'ISSUED', 'CANCELLED');
+DO $$ BEGIN
+    CREATE TYPE encounter_status AS ENUM ('DRAFT', 'IN_PROGRESS', 'PENDING_RESULTS', 'READY_FOR_REVIEW', 'COMPLETED', 'PUBLISHED');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE medical_encounters (
-    encounter_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    encounter_code     VARCHAR(50) NOT NULL UNIQUE,
-    queue_ticket_id    UUID NOT NULL UNIQUE, -- External Scheduling & Queue ID; one encounter per actual queue visit.
-    patient_id         UUID NOT NULL,        -- External Consumer ID.
-    doctor_id          UUID NOT NULL,        -- External Provider ID.
-    specialty_id       UUID,                 -- External Provider ID snapshot.
-    branch_id          UUID,
-    room_id            UUID,
-    status             encounter_status NOT NULL DEFAULT 'DRAFT',
-    chief_complaint    TEXT,
-    started_at         TIMESTAMPTZ,
-    completed_at       TIMESTAMPTZ,
-    published_at       TIMESTAMPTZ,
-    created_by_user_id UUID, -- External IAM identifier.
-    updated_by_user_id UUID, -- External IAM identifier.
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+DO $$ BEGIN
+    CREATE TYPE diagnosis_type AS ENUM ('PRIMARY', 'SECONDARY');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE test_order_status AS ENUM ('REQUESTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE test_result_status AS ENUM ('PENDING', 'PRELIMINARY', 'FINAL', 'AMENDED');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE prescription_status AS ENUM ('DRAFT', 'ISSUED', 'CANCELLED');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS medical_encounters (
+    encounter_id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    encounter_code      VARCHAR(50) NOT NULL UNIQUE,
+    queue_ticket_id     UUID NOT NULL UNIQUE, -- External Scheduling & Queue ID; one encounter per actual queue visit.
+    patient_id          UUID NOT NULL,        -- External Consumer ID.
+    doctor_id           UUID NOT NULL,        -- External Provider ID.
+    specialty_id        UUID,                 -- External Provider ID snapshot.
+    branch_id           UUID,
+    room_id             UUID,
+    status              encounter_status NOT NULL DEFAULT 'DRAFT',
+    chief_complaint     TEXT,
+    started_at          TIMESTAMPTZ,
+    completed_at        TIMESTAMPTZ,
+    published_at        TIMESTAMPTZ,
+    published_by_user_id UUID,                -- External IAM identifier of doctor publishing the record.
+    record_version      INTEGER NOT NULL DEFAULT 0 CHECK (record_version >= 0),
+    created_by_user_id  UUID,                 -- External IAM identifier.
+    updated_by_user_id  UUID,                 -- External IAM identifier.
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT ck_encounter_times CHECK (
         completed_at IS NULL OR started_at IS NULL OR completed_at >= started_at
     ),
     CONSTRAINT ck_published_time CHECK (status <> 'PUBLISHED' OR published_at IS NOT NULL)
 );
-CREATE INDEX ix_encounters_patient_time ON medical_encounters (patient_id, created_at DESC);
-CREATE INDEX ix_encounters_doctor_time ON medical_encounters (doctor_id, created_at DESC);
-CREATE INDEX ix_encounters_status ON medical_encounters (status, created_at DESC);
 
-CREATE TABLE clinical_notes (
+-- Ensure columns exist if table was created by an older bootstrap
+ALTER TABLE medical_encounters ADD COLUMN IF NOT EXISTS published_by_user_id UUID;
+ALTER TABLE medical_encounters ADD COLUMN IF NOT EXISTS record_version INTEGER NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS ix_encounters_patient_time ON medical_encounters (patient_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_encounters_doctor_time ON medical_encounters (doctor_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_encounters_doctor_status_time ON medical_encounters (doctor_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_encounters_status ON medical_encounters (status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS clinical_notes (
     note_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     encounter_id     UUID NOT NULL REFERENCES medical_encounters(encounter_id) ON DELETE RESTRICT,
     note_type        VARCHAR(50) NOT NULL, -- e.g. TRIAGE, PROGRESS, SUMMARY, DISCHARGE_ADVICE
@@ -47,9 +79,9 @@ CREATE TABLE clinical_notes (
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX ix_clinical_notes_encounter_time ON clinical_notes (encounter_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_clinical_notes_encounter_time ON clinical_notes (encounter_id, created_at);
 
-CREATE TABLE encounter_symptoms (
+CREATE TABLE IF NOT EXISTS encounter_symptoms (
     symptom_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     encounter_id     UUID NOT NULL REFERENCES medical_encounters(encounter_id) ON DELETE RESTRICT,
     symptom_name     VARCHAR(200) NOT NULL,
@@ -58,9 +90,9 @@ CREATE TABLE encounter_symptoms (
     description      TEXT,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX ix_symptoms_encounter ON encounter_symptoms (encounter_id);
+CREATE INDEX IF NOT EXISTS ix_symptoms_encounter ON encounter_symptoms (encounter_id);
 
-CREATE TABLE examination_findings (
+CREATE TABLE IF NOT EXISTS examination_findings (
     finding_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     encounter_id     UUID NOT NULL REFERENCES medical_encounters(encounter_id) ON DELETE RESTRICT,
     body_system      VARCHAR(100),
@@ -72,9 +104,9 @@ CREATE TABLE examination_findings (
     notes            TEXT,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX ix_findings_encounter ON examination_findings (encounter_id);
+CREATE INDEX IF NOT EXISTS ix_findings_encounter ON examination_findings (encounter_id);
 
-CREATE TABLE diagnoses (
+CREATE TABLE IF NOT EXISTS diagnoses (
     diagnosis_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     encounter_id     UUID NOT NULL REFERENCES medical_encounters(encounter_id) ON DELETE RESTRICT,
     diagnosis_code   VARCHAR(40), -- ICD code if available.
@@ -84,10 +116,10 @@ CREATE TABLE diagnoses (
     diagnosed_by_user_id UUID, -- External IAM identifier.
     diagnosed_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX ix_diagnoses_encounter ON diagnoses (encounter_id);
-CREATE INDEX ix_diagnoses_code ON diagnoses (diagnosis_code) WHERE diagnosis_code IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ix_diagnoses_encounter ON diagnoses (encounter_id);
+CREATE INDEX IF NOT EXISTS ix_diagnoses_code ON diagnoses (diagnosis_code) WHERE diagnosis_code IS NOT NULL;
 
-CREATE TABLE test_catalog (
+CREATE TABLE IF NOT EXISTS test_catalog (
     test_catalog_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     test_code       VARCHAR(50) NOT NULL UNIQUE,
     test_name       VARCHAR(200) NOT NULL,
@@ -97,7 +129,7 @@ CREATE TABLE test_catalog (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE test_orders (
+CREATE TABLE IF NOT EXISTS test_orders (
     test_order_id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     encounter_id     UUID NOT NULL REFERENCES medical_encounters(encounter_id) ON DELETE RESTRICT,
     order_code       VARCHAR(50) NOT NULL UNIQUE,
@@ -107,9 +139,9 @@ CREATE TABLE test_orders (
     ordered_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     completed_at     TIMESTAMPTZ
 );
-CREATE INDEX ix_test_orders_encounter ON test_orders (encounter_id, ordered_at DESC);
+CREATE INDEX IF NOT EXISTS ix_test_orders_encounter ON test_orders (encounter_id, ordered_at DESC);
 
-CREATE TABLE test_order_items (
+CREATE TABLE IF NOT EXISTS test_order_items (
     test_order_item_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     test_order_id      UUID NOT NULL REFERENCES test_orders(test_order_id) ON DELETE RESTRICT,
     test_catalog_id    UUID REFERENCES test_catalog(test_catalog_id) ON DELETE SET NULL,
@@ -118,9 +150,9 @@ CREATE TABLE test_order_items (
     status             test_order_status NOT NULL DEFAULT 'REQUESTED',
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX ix_test_order_items_order ON test_order_items (test_order_id);
+CREATE INDEX IF NOT EXISTS ix_test_order_items_order ON test_order_items (test_order_id);
 
-CREATE TABLE test_results (
+CREATE TABLE IF NOT EXISTS test_results (
     test_result_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     test_order_item_id UUID NOT NULL REFERENCES test_order_items(test_order_item_id) ON DELETE RESTRICT,
     result_status      test_result_status NOT NULL DEFAULT 'PENDING',
@@ -133,9 +165,9 @@ CREATE TABLE test_results (
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX ix_test_results_item_time ON test_results (test_order_item_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_test_results_item_time ON test_results (test_order_item_id, created_at DESC);
 
-CREATE TABLE diagnostic_files (
+CREATE TABLE IF NOT EXISTS diagnostic_files (
     diagnostic_file_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     test_result_id    UUID NOT NULL REFERENCES test_results(test_result_id) ON DELETE RESTRICT,
     file_name         VARCHAR(255) NOT NULL,
@@ -145,9 +177,9 @@ CREATE TABLE diagnostic_files (
     uploaded_by_user_id UUID,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX ix_diagnostic_files_result ON diagnostic_files (test_result_id);
+CREATE INDEX IF NOT EXISTS ix_diagnostic_files_result ON diagnostic_files (test_result_id);
 
-CREATE TABLE prescriptions (
+CREATE TABLE IF NOT EXISTS prescriptions (
     prescription_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     encounter_id      UUID NOT NULL REFERENCES medical_encounters(encounter_id) ON DELETE RESTRICT,
     prescription_code VARCHAR(50) NOT NULL UNIQUE,
@@ -158,9 +190,9 @@ CREATE TABLE prescriptions (
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX ix_prescriptions_encounter ON prescriptions (encounter_id);
+CREATE INDEX IF NOT EXISTS ix_prescriptions_encounter ON prescriptions (encounter_id);
 
-CREATE TABLE prescription_items (
+CREATE TABLE IF NOT EXISTS prescription_items (
     prescription_item_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     prescription_id      UUID NOT NULL REFERENCES prescriptions(prescription_id) ON DELETE CASCADE,
     medication_code      VARCHAR(80),
@@ -170,13 +202,13 @@ CREATE TABLE prescription_items (
     route                VARCHAR(80),
     frequency            VARCHAR(150),
     duration_days        INTEGER CHECK (duration_days IS NULL OR duration_days > 0),
-    quantity             NUMERIC(12,2) CHECK (quantity IS NULL OR quantity > 0),
+    quantity             NUMERIC(12,2) NOT NULL CHECK (quantity > 0),
     usage_instruction    TEXT,
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX ix_prescription_items_prescription ON prescription_items (prescription_id);
+CREATE INDEX IF NOT EXISTS ix_prescription_items_prescription ON prescription_items (prescription_id);
 
-CREATE TABLE follow_up_recommendations (
+CREATE TABLE IF NOT EXISTS follow_up_recommendations (
     follow_up_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     encounter_id       UUID NOT NULL REFERENCES medical_encounters(encounter_id) ON DELETE RESTRICT,
     recommended_date   DATE,
@@ -186,9 +218,9 @@ CREATE TABLE follow_up_recommendations (
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT ck_follow_up_target CHECK (recommended_date IS NOT NULL OR recommended_after_days IS NOT NULL OR instructions IS NOT NULL)
 );
-CREATE INDEX ix_followups_encounter ON follow_up_recommendations (encounter_id);
+CREATE INDEX IF NOT EXISTS ix_followups_encounter ON follow_up_recommendations (encounter_id);
 
-CREATE TABLE medical_record_versions (
+CREATE TABLE IF NOT EXISTS medical_record_versions (
     version_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     encounter_id     UUID NOT NULL REFERENCES medical_encounters(encounter_id) ON DELETE RESTRICT,
     version_number   INTEGER NOT NULL CHECK (version_number > 0),
@@ -199,19 +231,30 @@ CREATE TABLE medical_record_versions (
     UNIQUE (encounter_id, version_number)
 );
 
-CREATE TABLE clinical_audit_logs (
+CREATE TABLE IF NOT EXISTS clinical_audit_logs (
     audit_id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     encounter_id     UUID REFERENCES medical_encounters(encounter_id) ON DELETE RESTRICT,
+    patient_id       UUID, -- External Consumer ID for patient-level PHI audit indexing.
     actor_user_id    UUID,
     action_code      VARCHAR(100) NOT NULL,
+    resource_type    VARCHAR(80),
+    resource_id      UUID,
+    metadata         JSONB NOT NULL DEFAULT '{}'::jsonb, -- Must NOT contain PHI (diagnoses, prescriptions, notes).
     before_data      JSONB,
     after_data       JSONB,
     reason           TEXT,
     occurred_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX ix_clinical_audit_encounter_time ON clinical_audit_logs (encounter_id, occurred_at DESC);
 
-CREATE VIEW v_completed_encounters_by_doctor AS
+ALTER TABLE clinical_audit_logs ADD COLUMN IF NOT EXISTS patient_id UUID;
+ALTER TABLE clinical_audit_logs ADD COLUMN IF NOT EXISTS resource_type VARCHAR(80);
+ALTER TABLE clinical_audit_logs ADD COLUMN IF NOT EXISTS resource_id UUID;
+ALTER TABLE clinical_audit_logs ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE INDEX IF NOT EXISTS ix_clinical_audit_encounter_time ON clinical_audit_logs (encounter_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS ix_clinical_audit_patient_time ON clinical_audit_logs (patient_id, occurred_at DESC);
+
+CREATE OR REPLACE VIEW v_completed_encounters_by_doctor AS
 SELECT doctor_id, specialty_id, COUNT(*)::BIGINT AS completed_encounters
 FROM medical_encounters
 WHERE status IN ('COMPLETED', 'PUBLISHED')
@@ -219,6 +262,81 @@ GROUP BY doctor_id, specialty_id;
 
 -- Access rule: Patient may read only their own encounters and only after publication.
 -- Enforce this in the service/API authorization layer (and optionally PostgreSQL RLS in production).
+
+-- Immutability guards after PUBLISHED:
+-- 1) Published encounters cannot be deleted or directly modified except via explicit versioned republish (record_version increment).
+CREATE OR REPLACE FUNCTION fn_guard_published_encounter()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        IF OLD.status = 'PUBLISHED' THEN
+            RAISE EXCEPTION 'IMMUTABLE_AFTER_PUBLISH: Cannot delete a PUBLISHED encounter (%).', OLD.encounter_id;
+        END IF;
+        RETURN OLD;
+    END IF;
+
+    IF OLD.status = 'PUBLISHED' THEN
+        IF NEW.record_version <= OLD.record_version THEN
+            RAISE EXCEPTION 'IMMUTABLE_AFTER_PUBLISH: Cannot directly modify PUBLISHED encounter (%). Create a new version instead.', OLD.encounter_id;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_guard_published_encounter ON medical_encounters;
+CREATE TRIGGER trg_guard_published_encounter
+BEFORE UPDATE OR DELETE ON medical_encounters
+FOR EACH ROW EXECUTE FUNCTION fn_guard_published_encounter();
+
+-- 2) Child clinical records cannot be updated/deleted once parent encounter is PUBLISHED.
+CREATE OR REPLACE FUNCTION fn_guard_published_encounter_child()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_status encounter_status;
+    v_enc_id UUID;
+BEGIN
+    v_enc_id := COALESCE(OLD.encounter_id, NEW.encounter_id);
+    SELECT status INTO v_status FROM medical_encounters WHERE encounter_id = v_enc_id;
+    IF v_status = 'PUBLISHED' THEN
+        RAISE EXCEPTION 'IMMUTABLE_AFTER_PUBLISH: Cannot modify % for PUBLISHED encounter (%).', TG_TABLE_NAME, v_enc_id;
+    END IF;
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_guard_published_notes ON clinical_notes;
+CREATE TRIGGER trg_guard_published_notes
+BEFORE UPDATE OR DELETE ON clinical_notes
+FOR EACH ROW EXECUTE FUNCTION fn_guard_published_encounter_child();
+
+DROP TRIGGER IF EXISTS trg_guard_published_symptoms ON encounter_symptoms;
+CREATE TRIGGER trg_guard_published_symptoms
+BEFORE UPDATE OR DELETE ON encounter_symptoms
+FOR EACH ROW EXECUTE FUNCTION fn_guard_published_encounter_child();
+
+DROP TRIGGER IF EXISTS trg_guard_published_findings ON examination_findings;
+CREATE TRIGGER trg_guard_published_findings
+BEFORE UPDATE OR DELETE ON examination_findings
+FOR EACH ROW EXECUTE FUNCTION fn_guard_published_encounter_child();
+
+DROP TRIGGER IF EXISTS trg_guard_published_diagnoses ON diagnoses;
+CREATE TRIGGER trg_guard_published_diagnoses
+BEFORE UPDATE OR DELETE ON diagnoses
+FOR EACH ROW EXECUTE FUNCTION fn_guard_published_encounter_child();
+
+DROP TRIGGER IF EXISTS trg_guard_published_prescriptions ON prescriptions;
+CREATE TRIGGER trg_guard_published_prescriptions
+BEFORE UPDATE OR DELETE ON prescriptions
+FOR EACH ROW EXECUTE FUNCTION fn_guard_published_encounter_child();
+
+DROP TRIGGER IF EXISTS trg_guard_published_followups ON follow_up_recommendations;
+CREATE TRIGGER trg_guard_published_followups
+BEFORE UPDATE OR DELETE ON follow_up_recommendations
+FOR EACH ROW EXECUTE FUNCTION fn_guard_published_encounter_child();
 
 -- Transactional Outbox migration. Apply once to this service-owned database.
 -- Insert the outbox row in the SAME business transaction as the aggregate update.
@@ -247,3 +365,31 @@ CREATE INDEX IF NOT EXISTS ix_outbox_ready
     WHERE published_at IS NULL;
 CREATE INDEX IF NOT EXISTS ix_outbox_aggregate_version
     ON outbox_events (aggregate_type, aggregate_id, aggregate_version);
+
+-- Idempotency records for mutating requests (createEncounter, createTestOrder, createTestResult, createFollowUp).
+-- Enforces unique triple (principal_key, operation_scope, idempotency_key) with 48h TTL.
+CREATE TABLE IF NOT EXISTS idempotency_records (
+    idempotency_record_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    principal_key           VARCHAR(200) NOT NULL,
+    operation_scope         VARCHAR(180) NOT NULL,
+    idempotency_key         VARCHAR(120) NOT NULL,
+    request_hash            CHAR(64) NOT NULL,
+    state                   VARCHAR(16) NOT NULL DEFAULT 'IN_PROGRESS' CHECK (state IN ('IN_PROGRESS', 'COMPLETED')),
+    response_status         SMALLINT,
+    response_body_encrypted BYTEA,
+    response_key_version    VARCHAR(80),
+    resource_type           VARCHAR(80),
+    resource_id             UUID,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at              TIMESTAMPTZ NOT NULL DEFAULT (now() + INTERVAL '48 hours'),
+    completed_at            TIMESTAMPTZ,
+    CONSTRAINT uq_idempotency_principal_operation_key UNIQUE (principal_key, operation_scope, idempotency_key),
+    CONSTRAINT ck_idempotency_completion CHECK (
+        (state = 'IN_PROGRESS' AND completed_at IS NULL)
+        OR (state = 'COMPLETED' AND completed_at IS NOT NULL AND response_status IS NOT NULL)
+    ),
+    CONSTRAINT ck_idempotency_expiry CHECK (expires_at > created_at)
+);
+CREATE INDEX IF NOT EXISTS ix_idempotency_expires_at
+    ON idempotency_records (expires_at);
