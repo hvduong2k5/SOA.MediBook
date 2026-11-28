@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DatabaseService } from '../db/database.service';
+import { OutboxModule } from '../outbox/outbox.module';
 import {
   ASSIGNMENT_RESOLVER,
   TokenClaimAssignmentResolver,
@@ -10,6 +11,7 @@ import { SubresourcesController } from './subresources.controller';
 import { SubresourcesService } from './subresources.service';
 
 @Module({
+  imports: [OutboxModule],
   controllers: [PatientsController, SubresourcesController],
   providers: [
     DatabaseService,

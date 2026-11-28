@@ -17,6 +17,7 @@ export interface Principal {
 export interface AuthenticatedRequest {
   principal?: Principal;
   traceId?: string;
+  correlationId?: string;
   headers: Record<string, string | string[] | undefined>;
 }
 
