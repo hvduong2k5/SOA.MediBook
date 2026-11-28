@@ -493,29 +493,31 @@ Ràng buộc / quan hệ nội bộ:
 | Database       | clinical_db                                                                                                               |
 | SQL file       | clinical.sql                                                                                                              |
 | Phạm vi sở hữu | Sở hữu medical encounter, ghi chú, triệu chứng, findings, diagnosis, xét nghiệm, kết quả, prescription, follow-up, version và clinical audit. |
-| Số bảng / cột  | 17 / 164                                                                                                                  |
+| Số bảng / cột  | 17 / 172 (thống nhất theo `clinical.sql` và ADR-002)                                                                      |
 
 ### Danh sách bảng
 
 | **#** | **Bảng**                     | **Mục đích**                                                                               |
 |-------|----------------------------|--------------------------------------------------------------------------------------------|
-| 1     | encounters                 | Medical encounter gắn với queue_ticket khi khám thực tế bắt đầu                              |
+| 1     | medical_encounters         | Medical encounter gắn duy nhất với `queue_ticket_id` khi khám thực tế bắt đầu               |
 | 2     | clinical_notes             | Ghi chú lâm sàng                                                                            |
-| 3     | diagnoses                  | Chẩn đoán                                                                                    |
-| 4     | prescriptions              | Đơn thuốc                                                                                    |
-| 5     | prescription_items       | Chi tiết đơn thuốc                                                                            |
-| 6     | attachments                | Tệp đính kèm (metadata); file lưu ở object storage                                          |
-| 7     | test_requests              | Chỉ định xét nghiệm hoặc dịch vụ cận lâm sàng                                                 |
-| 8     | test_results               | Kết quả xét nghiệm, siêu âm, chẩn đoán hình ảnh                                                  |
-| 9     | follow_ups                 | Khuyến nghị tái khám hoặc theo dõi                                                            |
-| 10    | idempotency_records        | Bảng dữ liệu nghiệp vụ; xem mô tả từng cột và các ràng buộc bên dưới.                       |
-| 11    | outbox_events              | Bảng dữ liệu nghiệp vụ; xem mô tả từng cột và các ràng buộc bên dưới.                       |
-| 12    | clinical_audit_logs        | Audit đọc/ghi dữ liệu PHI                                                                     |
-| 13    | encounter_versions         | Phiên bản encounter                                                                          |
-| 14    | symptom_records            | Triệu chứng ghi nhận khi khám                                                                |
-| 15    | finding_records            | Phụ lục kết quả xét nghiệm hoặc chẩn đoán hỗ trợ                                                   |
-| 16    | prescription_histories     | Lịch sử thay đổi đơn thuốc                                                                   |
-| 17    | clinical_note_attachments  | Tệp đính kèm cho ghi chú lâm sàng (metadata)                                                   |
+| 3     | encounter_symptoms         | Triệu chứng ghi nhận khi khám                                                                |
+| 4     | examination_findings       | Khám thực thể / findings hỗ trợ chẩn đoán                                                   |
+| 5     | diagnoses                  | Chẩn đoán (ICD / mô tả)                                                                     |
+| 6     | test_catalog               | Danh mục xét nghiệm / dịch vụ cận lâm sàng                                                  |
+| 7     | test_orders                | Phiếu chỉ định xét nghiệm thuộc encounter                                                   |
+| 8     | test_order_items           | Chi tiết từng mục xét nghiệm trong phiếu chỉ định                                            |
+| 9     | test_results               | Kết quả xét nghiệm, siêu âm, chẩn đoán hình ảnh                                             |
+| 10    | diagnostic_files           | Metadata tệp chẩn đoán (file nhị phân lưu ở object storage)                                 |
+| 11    | prescriptions              | Đơn thuốc                                                                                    |
+| 12    | prescription_items         | Chi tiết thuốc trong đơn (`quantity > 0`)                                                   |
+| 13    | follow_up_recommendations  | Khuyến nghị tái khám hoặc theo dõi                                                          |
+| 14    | medical_record_versions    | Phiên bản hồ sơ bệnh án (`UNIQUE (encounter_id, version_number)`)                           |
+| 15    | clinical_audit_logs        | Audit đọc/ghi dữ liệu PHI (metadata không chứa nội dung PHI)                                |
+| 16    | outbox_events              | Transactional outbox phát domain event                                                       |
+| 17    | idempotency_records        | Lưu khóa idempotency (unique triple + TTL 48h) cho POST giao dịch                           |
+
+*(Ghi chú: Theo ADR-002, không tạo `prescription_histories` và `clinical_note_attachments`; lịch sử thay đổi được quản lý qua `medical_record_versions` + `clinical_audit_logs`, tệp đính kèm qua `diagnostic_files`.)*
 
 (Để tiết kiệm diện tích, phần mô tả chi tiết từng bảng tại file SQL bootstrap có thể xem trực tiếp)
 
